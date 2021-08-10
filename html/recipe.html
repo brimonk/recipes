@@ -1,0 +1,59 @@
+<head>
+    <link href="https://unpkg.com/tailwindcss@^2/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="shortcut icon" href="https://chrzanowski.me/favicon.ico"/>
+    <title>recipes.chrzanowski</title>
+    <meta name="description" content="the recipe website">
+
+    <script>
+    </script>
+</head>
+
+<body class="bg-gray-100">
+    <div class="container mx-auto px-2">
+
+        <form action="/recipe" method="post" class="bg-white w-full shadow-md rounded px-8 pt-6 pb-8 mb-4">
+            <div class="flex flex-wrap -mx-3 mb-6">
+                <div class="w-full px-3">
+                    <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="name">
+                        Name
+                    </label>
+                    <input id="name" type="text" autocomplete="off" class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 mb-3 leading-tight focus:outline-none focus:bg-white focus:border-gray-500">
+                </div>
+            </div>
+
+            <div class="flex flex-wrap -mx-3 mb-6">
+                <div class="w-full md:w-1/2 px-3 mb-6 md:mb-0">
+                    <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="prep_time">
+                        Prep Time
+                    </label>
+                    <input id="prep_time" type="text" autocomplete="off" class="appearance-none block w-full bg-gray-200 text-gray-700 border rounded py-3 px-4 mb-3 leading-tight focus:outline-none focus:bg-white">
+                </div>
+                <div class="w-full md:w-1/2 px-3">
+                    <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="cook_time">
+                        Cook Time
+                    </label>
+                    <input id="cook_time" type="text" autocomplete="off" class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 leading-tight focus:outline-none focus:bg-white focus:border-gray-500">
+                </div>
+            </div>
+
+            <div class="flex flex-wrap -mx-3 mb-6">
+                <div class="w-full px-3">
+                    <label class="block uppercase tracking-wide text-gray-700 text-xs font-bold mb-2" for="name">
+                        Notes
+                    </label>
+                    <textarea id="name" type="text" rows="8" class="appearance-none block w-full bg-gray-200 text-gray-700 border border-gray-200 rounded py-3 px-4 mb-3 leading-tight focus:outline-none focus:bg-white focus:border-gray-500"></textarea>
+                </div>
+            </div>
+
+            <div class="flex flex-wrap -mx-3 mb-6">
+                <div class="w-full px-3">
+                    <input type="submit" value="Save" class="bg-blue-500 hover:bg-blue-400 text-white font-bold py-2 px-4 rounded">
+                    <input type="button" value="Cancel" class="bg-gray-500 hover:bg-gray-400 text-white font-bold py-2 px-4 rounded">
+                </div>
+            </div>
+        </form>
+
+    </div>
+
+</body>
+

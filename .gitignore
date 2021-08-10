@@ -1,0 +1,9 @@
+*.o
+*.d
+*.db
+*.db-shm
+*.db-wal
+*.so
+fitness
+
+.gdb*
