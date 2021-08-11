@@ -26,7 +26,7 @@
 
 #include <magic.h>
 
-#define PORT (5000)
+#define PORT (2000)
 
 struct kvpair {
 	char *k;
@@ -83,13 +83,26 @@ char *decode_string(char *s);
 // get_codepoint: returns an integer representing the percent encoded codepoint
 int get_codepoint(char *s);
 
+// xctoi: converts a hex char (ascii) to the corresponding integer value
+int xctoi(char v);
+
 // SERVER FUNCTIONS
 // exercise_post: handles the POSTing of an exercise record
 int recipe_post(struct http_request_s *req, struct http_response_s *res);
 
+// recipe_validation: returns true if the form fits a recipe
+int recipe_validation(struct kvpairs *form);
+
 #define SQLITE_ERRMSG(x) (fprintf(stderr, "Error: %s\n", sqlite3_errstr(rc)))
 
 #define USAGE ("USAGE: %s <dbname>\n")
+
+// handle_sigint: handles SIGINT so we can write to the database
+void handle_sigint(int sig)
+{
+	sqlite3_close(db);
+	exit(1);
+}
 
 int main(int argc, char **argv)
 {
@@ -105,6 +118,8 @@ int main(int argc, char **argv)
 	server = http_server_init(PORT, request_handler);
 
 	printf("listening on http://localhost:%d\n", PORT);
+
+	signal(SIGINT, handle_sigint);
 
 	http_server_listen(server);
 
@@ -308,7 +323,7 @@ int get_list(struct http_request_s *req, struct http_response_s *res, char *tabl
 	return 0;
 }
 
-// recipe_post: handles the POSTing of an recipe record
+// recipe_post: handles the POSTing of a recipe record
 int recipe_post(struct http_request_s *req, struct http_response_s *res)
 {
 	sqlite3_stmt *stmt;
@@ -318,18 +333,12 @@ int recipe_post(struct http_request_s *req, struct http_response_s *res)
 
 	body = http_request_body(req);
 
+	printf("%.*s\n", body.len, body.buf);
+
 	data = parse_url_encoded(body);
 
-	// let's check that we have all of the data first
-	if (getv(data, "name") == NULL) {
-		return -1;
-	}
-
-	if (getv(data, "prep_time") == NULL) {
-		return -1;
-	}
-
-	if (getv(data, "cook_time") == NULL) {
+	if (!recipe_validation(&data)) {
+		free_kvpairs(data);
 		return -1;
 	}
 
@@ -337,6 +346,7 @@ int recipe_post(struct http_request_s *req, struct http_response_s *res)
 
 	rc = sqlite3_prepare_v2(db, THE_SQL, -1, &stmt, NULL);
 	if (rc != SQLITE_OK) {
+		free_kvpairs(data);
 		SQLITE_ERRMSG(rc);
 		sqlite3_finalize(stmt);
 		return -1;
@@ -348,7 +358,13 @@ int recipe_post(struct http_request_s *req, struct http_response_s *res)
 	sqlite3_bind_int(stmt, 2, atoi(getv(data, "prep_time")));
 	sqlite3_bind_int(stmt, 3, atoi(getv(data, "cook_time")));
 
-	sqlite3_step(stmt);
+	rc = sqlite3_step(stmt);
+	if (rc != SQLITE_DONE) {
+		free_kvpairs(data);
+		SQLITE_ERRMSG(rc);
+		sqlite3_finalize(stmt);
+		return -1;
+	}
 
 	sqlite3_finalize(stmt);
 
@@ -358,6 +374,57 @@ int recipe_post(struct http_request_s *req, struct http_response_s *res)
 	send_file(req, res, "html/success.html");
 
 	return 0;
+}
+
+// recipe_put: handles the PUTting of a recipe record
+int recipe_put(struct http_request_s *req, struct http_response_s *res)
+{
+	assert(0);
+	return 0;
+}
+
+// recipe_validation: returns true if the form fits a recipe
+int recipe_validation(struct kvpairs *form)
+{
+	char *string_values[] = {
+		"name"
+	};
+
+	char *int_values[] = {
+		"prep_time",
+		"cook_time"
+	};
+
+	size_t i, j;
+	int found;
+
+	for (i = 0; i < form->kvpair_len; i++) {
+		struct kvpair *pair = form->kvpair + i;
+
+		found = 0;
+
+		// check if this is a string value
+		for (j = 0; !found && j < sizeof(string_values) / sizeof(char *); j++) {
+			if (streq(pair->k, string_values[j]))
+				found = 1;
+		}
+
+		// check if this is an integer value
+		for (j = 0; !found && j < sizeof(int_values) / sizeof(char *); j++) {
+			if (streq(pair->k, int_values[j]))
+				found = 1;
+		}
+
+#if 0
+		if (!found) // we found a key in the form that ISN'T a recipe-ish key
+			return 0;
+#else
+		if (!found)
+			printf("found '%s' in form\n", pair->k);
+#endif
+	}
+
+	return 1;
 }
 
 // send_file: sends the file in the request, coalescing to '/index.html' from "html/"
@@ -493,8 +560,9 @@ char *decode_string(char *s)
 		}
 
 		case '%': {
-			t[j] = get_codepoint(s + (i + 1));
+			t[j] = get_codepoint(s + i);
 			i += 2;
+			break;
 		}
 
 		default:
@@ -513,16 +581,39 @@ int get_codepoint(char *s)
 
 	z = 0;
 
-	while (*s && (*s == '%' || isdigit(*s))) {
-		if (*s != '%') {
-			z *= 10;
-			z += (*s) - '0';
-		}
+	if (!s)
+		return -1;
 
+	if (*s == '%')
 		s++;
-	}
 
-	return z;
+	z = xctoi(s[0]) * 0x10 + xctoi(s[1]);
+
+	return z >= 0 ? z : -1;
+}
+
+// xctoi: converts a hex char (ascii) to the corresponding integer value
+int xctoi(char v)
+{
+	switch (v) {
+	case '0': return 0x00;
+	case '1': return 0x01;
+	case '2': return 0x02;
+	case '3': return 0x03;
+	case '4': return 0x04;
+	case '5': return 0x05;
+	case '6': return 0x06;
+	case '7': return 0x07;
+	case '8': return 0x08;
+	case '9': return 0x09;
+	case 'A': case 'a': return 0x0a;
+	case 'B': case 'b': return 0x0b;
+	case 'C': case 'c': return 0x0c;
+	case 'D': case 'd': return 0x0d;
+	case 'E': case 'e': return 0x0e;
+	case 'F': case 'f': return 0x0f;
+	default: return -1;
+	}
 }
 
 // free_kvpairs: frees a kvpairs array

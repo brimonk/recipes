@@ -3,16 +3,17 @@
 
 create table if not exists user
 (
-      id        text default (uuid())
-    , ts        text default (strftime('%Y-%m-%dT%H:%M:%S', 'now'))
+      id         text default (uuid())
+    , created_ts text default (strftime('%Y-%m-%dT%H:%M:%S', 'now'))
+    , updated_ts text default null
 
-    , email     text not null
-    , password  text not null
-
-    , is_verified   int default (0)
+    , username   text not null
+    , password   text not null
+    , email      text not null
+    , is_verified int default (0)
 );
 
-create unique index if not exists idx_user_id on user (id);
+create unique index if not exists idx_user_id on user(id);
 
 create table if not exists recipe
 (
@@ -20,17 +21,13 @@ create table if not exists recipe
     , created_ts text default (strftime('%Y-%m-%dT%H:%M:%S', 'now'))
     , updated_ts text default null
 
-    , user_id   text not null
-
     , name      text not null
 
     , prep_time integer not null
     , cook_time integer not null
-
-    , foreign key (user_id) references user (id)
 );
 
-create unique index if not exists idx_recipe_id on recipe (id);
+create unique index if not exists idx_recipe_id on recipe(id);
 
 create view if not exists v_list_recipe
 as
@@ -48,10 +45,10 @@ create table if not exists ingredient
 
     , amount     text not null
 
-    , foreign key (recipe_id) references recipe (id)
+    , foreign key (recipe_id) references recipe(id)
 );
 
-create unique index if not exists idx_ingredient_id on ingredient (id);
+create unique index if not exists idx_ingredient_id on ingredient(id);
 
 create table if not exists step
 (
@@ -64,10 +61,10 @@ create table if not exists step
     , text       text not null
     , sort       integer not null
 
-    , foreign key (recipe_id) references recipe (id)
+    , foreign key (recipe_id) references recipe(id)
 );
 
-create unique index if not exists idx_step_id on step (id);
+create unique index if not exists idx_step_id on step(id);
 
 create table if not exists note
 (
@@ -79,10 +76,10 @@ create table if not exists note
 
     , text text not null
 
-    , foreign key (recipe_id) references recipe (id)
+    , foreign key (recipe_id) references recipe(id)
 );
 
-create unique index if not exists idx_note_id on note (id);
+create unique index if not exists idx_note_id on note(id);
 
 create table if not exists tag
 (
@@ -93,10 +90,10 @@ create table if not exists tag
 
     , text not null
 
-    , foreign key (recipe_id) references recipe (id)
+    , foreign key (recipe_id) references recipe(id)
 );
 
-create unique index if not exists idx_tag_id on tag (id);
+create unique index if not exists idx_tag_id on tag(id);
 
 -- create table if not exists exercise
 -- (
