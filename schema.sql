@@ -25,6 +25,8 @@ create table if not exists recipe
 
     , prep_time integer not null
     , cook_time integer not null
+
+    , note      text null
 );
 
 create unique index if not exists idx_recipe_id on recipe(id);
@@ -65,21 +67,6 @@ create table if not exists step
 );
 
 create unique index if not exists idx_step_id on step(id);
-
-create table if not exists note
-(
-      id         text default (uuid())
-    , created_ts text default (strftime('%Y-%m-%dT%H:%M:%S', 'now'))
-    , updated_ts text default null
-
-    , recipe_id  text not null
-
-    , text text not null
-
-    , foreign key (recipe_id) references recipe(id)
-);
-
-create unique index if not exists idx_note_id on note(id);
 
 create table if not exists tag
 (

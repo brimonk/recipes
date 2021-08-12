@@ -91,7 +91,7 @@ void c_resize(void *ptr, size_t *len, size_t *cap, size_t bytes);
 
 // NOTE (brian) the regular expression functions were stolen from Rob Pike
 /* regex : function to help save some typing */
-int regex(char *text, char *regexp);
+int regex(char *regexp, char *text);
 /* regex_match : search for regexp anywhere in text */
 int regex_match (char *regexp, char *text);
 /* regex_matchhere: search for regexp at beginning of text */
@@ -270,7 +270,7 @@ int strcmpv(const void *a, const void *b)
 }
 
 /* regex : function to help save some typing */
-int regex(char *text, char *regexp)
+int regex(char *regexp, char *text)
 {
 	return regex_match(regexp, text);
 }

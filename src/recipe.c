@@ -66,7 +66,7 @@ struct kvpairs parse_url_encoded(struct http_string_s parseme);
 void free_kvpairs(struct kvpairs pairs);
 
 // getv: gets the value from a kvpair(s) given the key
-char *getv(struct kvpairs pairs, char *k);
+char *getv(struct kvpairs *pairs, char *k);
 
 // send_file: sends the file in the request, coalescing to '/index.html' from "html/"
 int send_file(struct http_request_s *req, struct http_response_s *res, char *path);
@@ -90,8 +90,27 @@ int xctoi(char v);
 // exercise_post: handles the POSTing of an exercise record
 int recipe_post(struct http_request_s *req, struct http_response_s *res);
 
+// recipe_put: handles the PUTting of a recipe record
+int recipe_put(struct http_request_s *req, struct http_response_s *res);
+
+// recipe_delete: handles the DELETEting of a recipe record
+int recipe_delete(struct http_request_s *req, struct http_response_s *res);
+
 // recipe_validation: returns true if the form fits a recipe
 int recipe_validation(struct kvpairs *form);
+
+// DATABASE FUNCTIONS
+// recipe_insert: inserts the recipe from the form into the database
+int recipe_insert(struct kvpairs *form);
+
+// ingredients_insert: inserts all of the available ingredients
+int ingredients_insert(struct kvpairs *form, s64 rowid);
+
+// steps_insert: inserts all of the available steps, in the right order
+int steps_insert(struct kvpairs *form, s64 rowid);
+
+// tags_insert: inserts all of the tags
+int tags_insert(struct kvpairs *form, s64 rowid);
 
 #define SQLITE_ERRMSG(x) (fprintf(stderr, "Error: %s\n", sqlite3_errstr(rc)))
 
@@ -188,6 +207,14 @@ void request_handler(struct http_request_s *req)
 		rc = recipe_post(req, res);
 		CHKERR(503);
 
+	} else if (rcheck(req, "/recipe", "PUT")) {
+		rc = recipe_put(req, res);
+		CHKERR(503);
+
+	} else if (rcheck(req, "/recipe", "DELETE")) {
+		rc = recipe_delete(req, res);
+		CHKERR(503);
+
 	} else if (rcheck(req, "/list", "GET")) {
 		rc = get_list(req, res, "v_list_recipe");
 		CHKERR(503);
@@ -195,6 +222,8 @@ void request_handler(struct http_request_s *req)
 	// error handling and default-ish things
 	} else if (rcheck(req, "/style.css", "GET")) {
 		send_file(req, res, "html/style.css");
+	} else if (rcheck(req, "/recipe.js", "GET")) {
+		send_file(req, res, "html/recipe.js");
 	} else if (rcheck(req, "/", "GET") || rcheck(req, "/index.html", "GET")) {
 		send_file(req, res, "html/index.html");
 	} else {
@@ -226,16 +255,16 @@ int get_list(struct http_request_s *req, struct http_response_s *res, char *tabl
 	z = http_request_target(req);
 	q = parse_url_encoded(z);
 
-	t = getv(q, "page_siz");
+	t = getv(&q, "page_siz");
 	page_siz = t == NULL ? 20 : atoi(t);
 
-	t = getv(q, "page_cnt");
+	t = getv(&q, "page_cnt");
 	page_cnt = t == NULL ? 0 : atoi(t);
 
-	t = getv(q, "sort_col"); // this only works because every table has a ts column
+	t = getv(&q, "sort_col"); // this only works because every table has a ts column
 	sort_col = t == NULL ? "ts" : t;
 
-	t = getv(q, "sort_ord"); // coalesce this to asc if null, or not allowed
+	t = getv(&q, "sort_ord"); // coalesce this to asc if null, or not allowed
 	sort_ord = t == NULL ? "asc" : (streq(t, "asc") || streq(t, "desc") ? t : "asc");
 
 #define THE_SQL	("select * from %s order by %s %s limit %ld offset %ld;")
@@ -326,54 +355,59 @@ int get_list(struct http_request_s *req, struct http_response_s *res, char *tabl
 // recipe_post: handles the POSTing of a recipe record
 int recipe_post(struct http_request_s *req, struct http_response_s *res)
 {
-	sqlite3_stmt *stmt;
-	struct kvpairs data;
+	struct kvpairs form;
 	struct http_string_s body;
+	s64 rowid;
 	int rc;
 
 	body = http_request_body(req);
 
 	printf("%.*s\n", body.len, body.buf);
 
-	data = parse_url_encoded(body);
+	form = parse_url_encoded(body);
 
-	if (!recipe_validation(&data)) {
-		free_kvpairs(data);
+	if (!recipe_validation(&form)) {
+		ERR("invalid form data!\n");
+		free_kvpairs(form);
 		return -1;
 	}
 
-#define THE_SQL ("insert into recipe (name, prep_time, cook_time) values (?,?,?);")
-
-	rc = sqlite3_prepare_v2(db, THE_SQL, -1, &stmt, NULL);
-	if (rc != SQLITE_OK) {
-		free_kvpairs(data);
-		SQLITE_ERRMSG(rc);
-		sqlite3_finalize(stmt);
+	rc = recipe_insert(&form);
+	if (rc < 0) {
+		ERR("couldn't insert recipe!\n");
 		return -1;
 	}
 
-#undef THE_SQL
+	rowid = rc;
 
-	sqlite3_bind_text(stmt, 1, getv(data, "name"), -1, NULL);
-	sqlite3_bind_int(stmt, 2, atoi(getv(data, "prep_time")));
-	sqlite3_bind_int(stmt, 3, atoi(getv(data, "cook_time")));
-
-	rc = sqlite3_step(stmt);
-	if (rc != SQLITE_DONE) {
-		free_kvpairs(data);
-		SQLITE_ERRMSG(rc);
-		sqlite3_finalize(stmt);
-		return -1;
+	rc = ingredients_insert(&form, rowid);
+	if (rc < 0) {
+		ERR("couldn't insert ingredients!\n");
+		goto recipe_post_error;
 	}
 
-	sqlite3_finalize(stmt);
+	rc = steps_insert(&form, rowid);
+	if (rc < 0) {
+		ERR("couldn't insert steps!\n");
+		goto recipe_post_error;
+	}
 
-	free_kvpairs(data);
+	rc = tags_insert(&form, rowid);
+	if (rc < 0) {
+		ERR("couldn't insert tags!\n");
+		goto recipe_post_error;
+	}
+
+	free_kvpairs(form);
 
 	// send a simple success page
 	send_file(req, res, "html/success.html");
 
 	return 0;
+
+recipe_post_error:
+	free_kvpairs(form);
+	return -1;
 }
 
 // recipe_put: handles the PUTting of a recipe record
@@ -383,11 +417,103 @@ int recipe_put(struct http_request_s *req, struct http_response_s *res)
 	return 0;
 }
 
+// recipe_delete: handles the DELETEting of a recipe record
+int recipe_delete(struct http_request_s *req, struct http_response_s *res)
+{
+	assert(0);
+	return 0;
+}
+
+// recipe_insert: inserts the recipe from the form into the database
+int recipe_insert(struct kvpairs *form)
+{
+	sqlite3_stmt *stmt;
+	char *sql;
+	int rc;
+
+	sql = "insert into recipe (name, prep_time, cook_time, note) values (?,?,?,?);";
+
+	rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+	if (rc != SQLITE_OK) {
+		return -1;
+	}
+
+	sqlite3_bind_text(stmt, 1, getv(form, "name"), -1, NULL);
+	sqlite3_bind_int(stmt, 2, atoi(getv(form, "prep_time")));
+	sqlite3_bind_int(stmt, 3, atoi(getv(form, "cook_time")));
+
+	if (getv(form, "note") != NULL) {
+		sqlite3_bind_text(stmt, 4, getv(form, "note"), -1, NULL);
+	} else {
+		sqlite3_bind_null(stmt, 4);
+	}
+
+
+	rc = sqlite3_step(stmt);
+	if (rc != SQLITE_DONE) {
+		SQLITE_ERRMSG(rc);
+		sqlite3_finalize(stmt);
+		return -1;
+	}
+
+	sqlite3_finalize(stmt);
+
+	return sqlite3_last_insert_rowid(db);
+}
+
+// ingredients_insert: inserts all of the available ingredients
+int ingredients_insert(struct kvpairs *form, s64 rowid)
+{
+	struct kvpair *pair;
+	char *ingredients[512];
+	size_t i;
+	size_t idx;
+	char *s;
+
+	memset(ingredients, 0, sizeof ingredients);
+
+	for (i = 0; i < form->kvpair_len; i++) { // gather all of the ingredients
+		pair = form->kvpair + i;
+		if (regex("ingredients[.*]", pair->k)) {
+			s = strchr(pair->k, '[') + 1;
+			idx = atoi(s);
+			if (idx < 512 && !ingredients[idx]) {
+				ingredients[idx] = pair->v;
+			} else {
+				ERR("user sent out of bounds or duplicate index '%ld\n", i);
+			}
+		}
+	}
+
+	for (i = 0; i < 512; i++) {
+		if (ingredients[i])
+			printf("%ld : %s\n", i, ingredients[i]);
+	}
+
+	return 0;
+}
+
+// steps_insert: inserts all of the available steps, in the right order
+int steps_insert(struct kvpairs *form, s64 rowid)
+{
+	return 0;
+}
+
+// tags_insert: inserts all of the tags
+int tags_insert(struct kvpairs *form, s64 rowid)
+{
+	return 0;
+}
+
 // recipe_validation: returns true if the form fits a recipe
 int recipe_validation(struct kvpairs *form)
 {
 	char *string_values[] = {
-		"name"
+		"name",
+		"ingredients[.*]",
+		"steps[.*]",
+		"tags[.*]",
+		"note"
 	};
 
 	char *int_values[] = {
@@ -405,13 +531,13 @@ int recipe_validation(struct kvpairs *form)
 
 		// check if this is a string value
 		for (j = 0; !found && j < sizeof(string_values) / sizeof(char *); j++) {
-			if (streq(pair->k, string_values[j]))
+			if (regex(string_values[j], pair->k))
 				found = 1;
 		}
 
 		// check if this is an integer value
 		for (j = 0; !found && j < sizeof(int_values) / sizeof(char *); j++) {
-			if (streq(pair->k, int_values[j]))
+			if (regex(int_values[j], pair->k))
 				found = 1;
 		}
 
@@ -496,13 +622,13 @@ int is_uuid(char *id)
 }
 
 // getv: gets the value from a kvpair(s) given the key
-char *getv(struct kvpairs pairs, char *k)
+char *getv(struct kvpairs *pairs, char *k)
 {
 	size_t i;
 
-	for (i = 0; i < pairs.kvpair_len; i++) {
-		if (streq(pairs.kvpair[i].k, k))
-			return pairs.kvpair[i].v;
+	for (i = 0; i < pairs->kvpair_len; i++) {
+		if (streq(pairs->kvpair[i].k, k))
+			return pairs->kvpair[i].v;
 	}
 
 	return NULL;
@@ -614,6 +740,13 @@ int xctoi(char v)
 	case 'F': case 'f': return 0x0f;
 	default: return -1;
 	}
+}
+
+int _xctoi(char v) {
+	v = tolower(v);
+	if ( v >= '0' || v <= '9' ) return v - '0';
+	if ( v >= 'a' || v <= 'f' ) return v - 'a' + 10;
+	return -1;
 }
 
 // free_kvpairs: frees a kvpairs array
