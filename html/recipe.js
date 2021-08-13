@@ -59,7 +59,7 @@ function get_ingredient(i) {
     // input with name with index
     // input button with handler and id
 
-    const label = make_label(i.toString() + ".");
+    const label = make_label((i + 1).toString() + ".");
     const textbox = make_textbox(`ingredients[${i}]`);
     const remove = make_xbutton(`ingredients[${i}]_xbutton`);
 
@@ -78,14 +78,21 @@ function get_ingredient(i) {
 // renumber_ingredients: renumbers the ingredients list
 function renumber_ingredients() {
     const handle = element("ingredient-hook");
-    console.log("start");
     let j = 0;
     for (let i = 0; i < totals.ingredients; i++) {
         const item = element(`ingredients[${i}]_handle`);
         if (item) {
-            console.log(`renaming ${i} to ${j}`);
             item.setAttribute("id", `ingredients[${j}]_handle`);
-            item.firstElementChild.innerText = `${j++}.`;
+            item.setAttribute("name", `ingredients[${j}]_handle`);
+            item.firstElementChild.innerText = `${j + 1}.`;
+
+            // NOTE (Brian) this is kinda wonky
+            const inputbox = item.childNodes[1];
+
+            inputbox.setAttribute("id", `ingredients[${j}]`);
+            inputbox.setAttribute("name", `ingredients[${j}]`);
+
+            j++;
         }
     }
 

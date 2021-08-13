@@ -448,7 +448,6 @@ int recipe_insert(struct kvpairs *form)
 		sqlite3_bind_null(stmt, 4);
 	}
 
-
 	rc = sqlite3_step(stmt);
 	if (rc != SQLITE_DONE) {
 		SQLITE_ERRMSG(rc);
@@ -465,10 +464,13 @@ int recipe_insert(struct kvpairs *form)
 int ingredients_insert(struct kvpairs *form, s64 rowid)
 {
 	struct kvpair *pair;
+    sqlite3_stmt *stmt;
 	char *ingredients[512];
 	size_t i;
 	size_t idx;
+    char *sql;
 	char *s;
+    int rc;
 
 	memset(ingredients, 0, sizeof ingredients);
 
@@ -485,9 +487,29 @@ int ingredients_insert(struct kvpairs *form, s64 rowid)
 		}
 	}
 
+    sql = "insert into ingredient (recipe_id, desc) values ((select id from recipe where rowid = ?), ?);";
+
 	for (i = 0; i < 512; i++) {
-		if (ingredients[i])
-			printf("%ld : %s\n", i, ingredients[i]);
+		if (ingredients[i]) {
+            rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+            if (rc != SQLITE_OK) {
+                SQLITE_ERRMSG(rc);
+                sqlite3_finalize(stmt);
+                return -1;
+            }
+
+            rc = sqlite3_bind_int64(stmt, 1, rowid);
+            rc = sqlite3_bind_text(stmt, 2, ingredients[i], -1, NULL);
+
+            rc = sqlite3_step(stmt);
+            if (rc != SQLITE_DONE) {
+                SQLITE_ERRMSG(rc);
+                sqlite3_finalize(stmt);
+                return -1;
+            }
+
+            sqlite3_finalize(stmt);
+        }
 	}
 
 	return 0;

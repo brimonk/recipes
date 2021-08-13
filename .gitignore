@@ -4,6 +4,6 @@
 *.db-shm
 *.db-wal
 *.so
-fitness
+recipe
 
 .gdb*
