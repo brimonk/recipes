@@ -571,12 +571,60 @@ int steps_insert(struct kvpairs *form, s64 rowid)
 	}
 
 	return 0;
-
 }
 
 // tags_insert: inserts all of the tags
 int tags_insert(struct kvpairs *form, s64 rowid)
 {
+	struct kvpair *pair;
+    sqlite3_stmt *stmt;
+	char *tags[512];
+	size_t i;
+	size_t idx;
+    char *sql;
+	char *s;
+    int rc;
+
+	memset(tags, 0, sizeof tags);
+
+	for (i = 0; i < form->kvpair_len; i++) { // gather all of the tags
+		pair = form->kvpair + i;
+		if (regex("tags[.*]", pair->k)) {
+			s = strchr(pair->k, '[') + 1;
+			idx = atoi(s);
+			if (idx < 512 && !tags[idx]) {
+				tags[idx] = pair->v;
+			} else {
+				ERR("user sent out of bounds or duplicate index '%ld\n", i);
+			}
+		}
+	}
+
+    sql = "insert into tag (recipe_id, text) values ((select id from recipe where rowid = ?), ?);";
+
+	for (i = 0; i < 512; i++) {
+		if (tags[i]) {
+            rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+            if (rc != SQLITE_OK) {
+                SQLITE_ERRMSG(rc);
+                sqlite3_finalize(stmt);
+                return -1;
+            }
+
+            rc = sqlite3_bind_int64(stmt, 1, rowid);
+            rc = sqlite3_bind_text(stmt, 2, tags[i], -1, NULL);
+
+            rc = sqlite3_step(stmt);
+            if (rc != SQLITE_DONE) {
+                SQLITE_ERRMSG(rc);
+                sqlite3_finalize(stmt);
+                return -1;
+            }
+
+            sqlite3_finalize(stmt);
+        }
+	}
+
 	return 0;
 }
 

@@ -81,7 +81,8 @@ List.prototype.renumber = function() {
 
 let state = {
     ingredients: new List("ingredients-hook", "ingredients"),
-    steps: new List("steps-hook", "steps")
+    steps: new List("steps-hook", "steps"),
+    tags: new List("tags-hook", "tags")
 };
 
 // element: terse passthrough for getElementById
@@ -94,14 +95,6 @@ function create(tag) {
     return document.createElement(tag);
 }
 
-function step_add() {
-    throw new Error("not implemented!");
-}
-
-function tag_add() {
-    throw new Error("not implemented!");
-}
-
 // hookups: add button hookups
 function hookups() {
     document.getElementById("ingredients_add_button").addEventListener("click", () => {
@@ -110,6 +103,10 @@ function hookups() {
 
     document.getElementById("steps_add_button").addEventListener("click", () => {
         state.steps.append();
+    });
+
+    document.getElementById("tags_add_button").addEventListener("click", () => {
+        state.tags.append();
     });
 }
 
