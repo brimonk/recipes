@@ -52,6 +52,7 @@ function get_ingredient(i) {
 
     const template = document.createElement("div");
 
+    template.setAttribute("id", `ingredients[${i}]_handle`);
     template.setAttribute("class", "flex space-x-4 space-y-4");
 
     // label with index-ish
@@ -62,11 +63,33 @@ function get_ingredient(i) {
     const textbox = make_textbox(`ingredients[${i}]`);
     const remove = make_xbutton(`ingredients[${i}]_xbutton`);
 
+    remove.addEventListener("click", () => {
+        template.parentElement.removeChild(template);
+        renumber_ingredients();
+    });
+
     template.appendChild(label);
     template.appendChild(textbox);
     template.appendChild(remove);
 
     return template;
+}
+
+// renumber_ingredients: renumbers the ingredients list
+function renumber_ingredients() {
+    const handle = element("ingredient-hook");
+    console.log("start");
+    let j = 0;
+    for (let i = 0; i < totals.ingredients; i++) {
+        const item = element(`ingredients[${i}]_handle`);
+        if (item) {
+            console.log(`renaming ${i} to ${j}`);
+            item.setAttribute("id", `ingredients[${j}]_handle`);
+            item.firstElementChild.innerText = `${j++}.`;
+        }
+    }
+
+    totals.ingredients--;
 }
 
 // make_label: makes a label with the right styling
