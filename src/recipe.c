@@ -240,6 +240,10 @@ void request_handler(struct http_request_s *req)
 		rc = send_file(req, res, "html/newuser.js");
         CHKERR(503);
 
+    } else if (rcheck(req, "/newuser", "POST")) {
+        rc = user_post(req, res);
+        CHKERR(503);
+
 	// static files, unrelated to main CRUD operations
 	} else if (rcheck(req, "/style.css", "GET")) {
 		rc = send_file(req, res, "html/style.css");
@@ -385,8 +389,6 @@ int recipe_post(struct http_request_s *req, struct http_response_s *res)
 
 	body = http_request_body(req);
 
-	printf("%.*s\n", body.len, body.buf);
-
 	form = parse_url_encoded(body);
 
 	if (!recipe_validation(&form)) {
@@ -398,7 +400,7 @@ int recipe_post(struct http_request_s *req, struct http_response_s *res)
 	rc = recipe_insert(&form);
 	if (rc < 0) {
 		ERR("couldn't insert recipe!\n");
-		return -1;
+		goto recipe_post_error;
 	}
 
 	rowid = rc;
@@ -696,6 +698,60 @@ int recipe_validation(struct kvpairs *form)
 	}
 
 	return 1;
+}
+
+// user_post: handles the POSTing of a new user record
+int user_post(struct http_request_s *req, struct http_response_s *res)
+{
+    struct kvpairs form;
+    struct http_string_s body;
+    s64 rowid;
+    int rc;
+
+    body = http_request_body(req);
+
+    form = parse_url_encoded(body);
+
+    if (!user_validation(&form)) {
+        ERR("invalid user form data!\n");
+        goto user_post_error;
+    }
+
+    rc = user_insert(&form);
+    if (rc < 0) {
+        ERR("couldn't insert a user!\n");
+        goto user_post_error;
+    }
+
+    return 0;
+
+user_post_error:
+    free_kvpairs(form);
+    return -1;
+}
+
+// user_insert: handles the inserting of a user
+int user_insert(struct kvpairs *form)
+{
+    sqlite3_stmt *stmt;
+    int rc;
+
+    // NOTE (Brian) because of password generation, this is a computationally
+    // intensive function. If there's anything that'll force this server to
+    // become multi-threaded sooner than later, it'll be this one.
+    //
+    // You've been warned.
+
+    return 0;
+}
+
+// user_validation: returns true if this is a valid user form
+int user_validation(struct kvpairs *form)
+{
+    // NOTE (Brian) this NEEDS to mirror the exact rules in html/newuser.js
+    // otherwise, we'll be sending mixed signals.
+
+    return 1;
 }
 
 // send_file: sends the file in the request, coalescing to '/index.html' from "html/"

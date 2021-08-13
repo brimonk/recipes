@@ -1,6 +1,6 @@
-# Fitness
+# Recipes
 
-This is my fitness tracking app.
+This is my recipe website.
 
 ## Building
 
@@ -25,11 +25,13 @@ on like, a computer from 2002 with how simple they _should_ be.
 
 Honestly, just watch some of Handmade Hero, and you'll probably get why.
 
-## In Progress
+## WIP
 
-* New User Form
+### In Progress
 
-## To Do (Features)
+* New User Create
+
+### To Do (Features)
 
 * User Login
 * User Session Cookie
@@ -43,20 +45,31 @@ Honestly, just watch some of Handmade Hero, and you'll probably get why.
 * Email Verification for Login Stuff
 * Profile Pictures?
 
-## To Do (Cleanup)
+### To Do (Cleanup)
 
 * CSS wrapper classes for tailwind
 * Tailwind in-repo
-* Title Bar / Collapsable Menu
+* Nav Bar / Collapsable Menu
+* Should we be sending a 503 every time a function errors?
+* Can we statically allocate the form data? You get 1024 form k/v pairs, and that's it?
 
-## To Do (Performance)
+### To Do (Performance)
 
 * Each request should be processed in < 10ms
 * Each page navigation should be processed in < 10ms (with network considerations)
 
-## To Do (UX)
+### To Do (Security)
+
+* Validate our inputs against SQL injection
+* Validate behavior against popular attacks
+
+### To Do (UX)
 
 * Drag and drop list items around
 * Compress files from `send_file`
     * Pre-compress files?
+
+### To Do (Future)
+
+* Put the Web stuff into a single header file library for future use
 
