@@ -113,7 +113,7 @@ function make_label(text) {
     const label = create("label");
 
     label.setAttribute("class", "text-gray-700 text-lg space-y-28");
-    label.textContent = text;
+    label.innerText = text;
 
     return label;
 }

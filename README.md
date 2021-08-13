@@ -25,22 +25,23 @@ on like, a computer from 2002 with how simple they _should_ be.
 
 Honestly, just watch some of Handmade Hero, and you'll probably get why.
 
-## To Do (Technical)
+## In Progress
 
-* User Support
+* New User Form
 
 ## To Do (Features)
 
-* New User Form
-* Login Form
 * User Login
 * User Session Cookie
 * User Logout
+* Login Form
 * Recipe Edit
 * Recipe Delete
-* List
-* Pictures Table
+* Pictures Support
 * Ratings / Comments
+* Forgot Password
+* Email Verification for Login Stuff
+* Profile Pictures?
 
 ## To Do (Cleanup)
 
@@ -48,7 +49,14 @@ Honestly, just watch some of Handmade Hero, and you'll probably get why.
 * Tailwind in-repo
 * Title Bar / Collapsable Menu
 
+## To Do (Performance)
+
+* Each request should be processed in < 10ms
+* Each page navigation should be processed in < 10ms (with network considerations)
+
 ## To Do (UX)
 
 * Drag and drop list items around
+* Compress files from `send_file`
+    * Pre-compress files?
 

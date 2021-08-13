@@ -195,14 +195,21 @@ void request_handler(struct http_request_s *req)
 	struct http_response_s *res;
 	int rc;
 
+#define SNDERR(E) send_error(req, res, (E))
 #define CHKERR(E) do { if ((rc) < 0) { send_error(req, res, (E)); } } while (0)
 
 	res = http_response_init();
 
+	if (0) { // send recipe form
+
 	// recipe endpoints
-	if (rcheck(req, "/recipe", "GET")) { // send recipe form
+    } else if (rcheck(req, "/recipe", "GET")) { // send recipe form
 		rc = send_file(req, res, "html/recipe.html");
 		CHKERR(503);
+
+	} else if (rcheck(req, "/recipe.js", "GET")) {
+		rc = send_file(req, res, "html/recipe.js");
+        CHKERR(503);
 
 	} else if (rcheck(req, "/recipe", "POST")) {
 		rc = recipe_post(req, res);
@@ -220,15 +227,30 @@ void request_handler(struct http_request_s *req)
 		rc = get_list(req, res, "v_list_recipe");
 		CHKERR(503);
 
-	// error handling and default-ish things
-	} else if (rcheck(req, "/style.css", "GET")) {
-		send_file(req, res, "html/style.css");
 	} else if (rcheck(req, "/recipe.js", "GET")) {
-		send_file(req, res, "html/recipe.js");
+		rc = send_file(req, res, "html/recipe.js");
+		CHKERR(503);
+
+    // user endpoints
+	} else if (rcheck(req, "/newuser", "GET")) {
+		rc = send_file(req, res, "html/newuser.html");
+        CHKERR(503);
+
+	} else if (rcheck(req, "/newuser.js", "GET")) {
+		rc = send_file(req, res, "html/newuser.js");
+        CHKERR(503);
+
+	// static files, unrelated to main CRUD operations
+	} else if (rcheck(req, "/style.css", "GET")) {
+		rc = send_file(req, res, "html/style.css");
+        CHKERR(503);
+
 	} else if (rcheck(req, "/", "GET") || rcheck(req, "/index.html", "GET")) {
-		send_file(req, res, "html/index.html");
+		rc = send_file(req, res, "html/index.html");
+        CHKERR(503);
+
 	} else {
-		send_error(req, res, 404);
+        SNDERR(404);
 	}
 }
 
