@@ -1,5 +1,5 @@
 CC=cc
-LINKER=-ldl -lpthread -lm -lmagic
+LINKER=-ldl -lpthread -lm -lmagic -lsodium
 CFLAGS=-fPIC -Wall -g3 -march=native
 TARGET=./recipe
 SRC=$(wildcard src/*.c)

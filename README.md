@@ -13,18 +13,10 @@ make
 ## Running
 
 ```sh
-./fitness <dbname>
+./recipe <dbname>
 ```
 
 ## Features
-
-This application has list pages and CRUD pages for the following tables:
-
-* meal
-* weight
-* exercise
-* bloodpressure
-* sleep
 
 ## Reasoning
 
@@ -33,10 +25,10 @@ even make any sense. What about the security?" and to those things I say: the co
 simple apps shouldn't take up more than a few megabytes on disk, I should be able to run all of them
 on like, a $5 RPI.
 
+Honestly, just watch some of Handmade Hero, and you'll probably get why.
+
 ## To Do
 
 * BearSSL - In Repo
 * User Support
-* Password hashing
-* JWT Support (probably means a JSON library too)
 

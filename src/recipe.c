@@ -25,6 +25,7 @@
 #include "sqlite3.h"
 
 #include <magic.h>
+#include <sodium.h>
 
 #define PORT (2000)
 
@@ -838,6 +839,12 @@ void init(char *db_file_name, char *sql_file_name)
 		ERR("Critical error in creating sql tables!!\n");
 		exit(1);
 	}
+
+    rc = sodium_init();
+    if (rc < 0) {
+        ERR("Couldn't initialize libsodium!\n");
+        exit(1);
+    }
 
 #if 0
 	char *err;
