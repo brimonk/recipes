@@ -62,8 +62,6 @@ List.prototype.renumber = function() {
     for (let i = 0; i < this.count; i++) {
         const item = element(`${this.name}[${i}]_handle`);
         if (item) {
-            console.log(`renumbering ${i} to ${j}`);
-
             item.setAttribute("id", `${this.name}[${j}]_handle`);
             item.setAttribute("name", `${this.name}[${j}]_handle`);
             item.firstElementChild.innerText = `${j + 1}.`;
