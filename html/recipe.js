@@ -1,13 +1,87 @@
 // Brian Chrzanowski
 // 2021-08-12 14:26:28
 
-// TODO (Brian)
-// 1. add button handlers list items
+// List: helper class / functions to maintaining a list of elements
+function List(id, name) {
+    this.id = id;
+    this.name = name;
 
-let totals = {
-    ingredients: 0,
-    steps: 0,
-    tags: 0
+    this.hook = document.getElementById(this.id);
+    if (!this.hook) {
+        throw new Error(`couldn't find element '${this.id}`);
+    }
+
+    this.count = 0;
+
+    this.class_wrapper = "flex space-x-4 space-y-4";
+
+    this.append();
+}
+
+// List.append: appends a new item into the list
+List.prototype.append = function() {
+    const element = this.get(this.count++);
+    const hook = document.getElementById(this.id);
+    hook.appendChild(element);
+};
+
+// List.get: gets a new list item (html / dom element)
+List.prototype.get = function(idx) {
+    if (idx < 0) {
+        idx = 0;
+    }
+
+    const template = document.createElement("div");
+
+    const array_prefix = `${this.name}[${idx}]`;
+
+    template.setAttribute("id", `${array_prefix}_handle`);
+    template.setAttribute("class", this.class_wrapper);
+
+    const label = make_label((idx + 1).toString() + ".");
+    const textbox = make_textbox(`${array_prefix}`);
+    const xbutton = make_xbutton(`${array_prefix}_xbutton`);
+
+    xbutton.addEventListener("click", () => {
+        template.parentElement.removeChild(template);
+        this.renumber(idx);
+        this.count--;
+    });
+
+    template.appendChild(label);
+    template.appendChild(textbox);
+    template.appendChild(xbutton);
+
+    return template;
+};
+
+// List.renumber: renumbers all of the elements in the list
+List.prototype.renumber = function() {
+    let j = 0;
+
+    for (let i = 0; i < this.count; i++) {
+        const item = element(`${this.name}[${i}]_handle`);
+        if (item) {
+            console.log(`renumbering ${i} to ${j}`);
+
+            item.setAttribute("id", `${this.name}[${j}]_handle`);
+            item.setAttribute("name", `${this.name}[${j}]_handle`);
+            item.firstElementChild.innerText = `${j + 1}.`;
+
+            // NOTE (Brian) this is kinda wonky
+            const inputbox = item.childNodes[1];
+
+            inputbox.setAttribute("id", `${this.name}[${j}]`);
+            inputbox.setAttribute("name", `${this.name}[${j}]`);
+
+            j++;
+        }
+    }
+};
+
+let state = {
+    ingredients: new List("ingredients-hook", "ingredients"),
+    steps: new List("steps-hook", "steps")
 };
 
 // element: terse passthrough for getElementById
@@ -30,73 +104,13 @@ function tag_add() {
 
 // hookups: add button hookups
 function hookups() {
-    document.getElementById("ingredient_add_button").addEventListener("click", () => {
-        console.log("ingredient add button clicked!");
-        add_ingredient();
-    });
-}
-
-// add_ingredient: adds a new ingredient item
-function add_ingredient() {
-    const element = get_ingredient(totals.ingredients++);
-    const hook = document.getElementById("ingredient-hook");
-
-    hook.appendChild(element);
-}
-
-// get_ingredient: gets the ingredient template, with the array indexed
-function get_ingredient(i) {
-    if (i < 0) {
-        i = 0;
-    }
-
-    const template = document.createElement("div");
-
-    template.setAttribute("id", `ingredients[${i}]_handle`);
-    template.setAttribute("class", "flex space-x-4 space-y-4");
-
-    // label with index-ish
-    // input with name with index
-    // input button with handler and id
-
-    const label = make_label((i + 1).toString() + ".");
-    const textbox = make_textbox(`ingredients[${i}]`);
-    const remove = make_xbutton(`ingredients[${i}]_xbutton`);
-
-    remove.addEventListener("click", () => {
-        template.parentElement.removeChild(template);
-        renumber_ingredients();
+    document.getElementById("ingredients_add_button").addEventListener("click", () => {
+        state.ingredients.append();
     });
 
-    template.appendChild(label);
-    template.appendChild(textbox);
-    template.appendChild(remove);
-
-    return template;
-}
-
-// renumber_ingredients: renumbers the ingredients list
-function renumber_ingredients() {
-    const handle = element("ingredient-hook");
-    let j = 0;
-    for (let i = 0; i < totals.ingredients; i++) {
-        const item = element(`ingredients[${i}]_handle`);
-        if (item) {
-            item.setAttribute("id", `ingredients[${j}]_handle`);
-            item.setAttribute("name", `ingredients[${j}]_handle`);
-            item.firstElementChild.innerText = `${j + 1}.`;
-
-            // NOTE (Brian) this is kinda wonky
-            const inputbox = item.childNodes[1];
-
-            inputbox.setAttribute("id", `ingredients[${j}]`);
-            inputbox.setAttribute("name", `ingredients[${j}]`);
-
-            j++;
-        }
-    }
-
-    totals.ingredients--;
+    document.getElementById("steps_add_button").addEventListener("click", () => {
+        state.steps.append();
+    });
 }
 
 // make_label: makes a label with the right styling
@@ -138,9 +152,4 @@ function make_xbutton(id) {
 
 // hook up the button handler
 hookups();
-
-add_ingredient();
-
-// step_add();
-// tag_add();
 

@@ -45,7 +45,7 @@ create table if not exists ingredient
 
     , desc       text not null
 
-    , amount     text null
+    , sort       integer not null
 
     , foreign key (recipe_id) references recipe(id)
 );

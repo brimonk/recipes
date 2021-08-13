@@ -467,7 +467,7 @@ int ingredients_insert(struct kvpairs *form, s64 rowid)
 	struct kvpair *pair;
     sqlite3_stmt *stmt;
 	char *ingredients[512];
-	size_t i;
+	size_t i, j;
 	size_t idx;
     char *sql;
 	char *s;
@@ -488,9 +488,9 @@ int ingredients_insert(struct kvpairs *form, s64 rowid)
 		}
 	}
 
-    sql = "insert into ingredient (recipe_id, desc) values ((select id from recipe where rowid = ?), ?);";
+    sql = "insert into ingredient (recipe_id, desc, sort) values ((select id from recipe where rowid = ?), ?, ?);";
 
-	for (i = 0; i < 512; i++) {
+	for (i = j = 0; i < 512; i++) {
 		if (ingredients[i]) {
             rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
             if (rc != SQLITE_OK) {
@@ -501,6 +501,7 @@ int ingredients_insert(struct kvpairs *form, s64 rowid)
 
             rc = sqlite3_bind_int64(stmt, 1, rowid);
             rc = sqlite3_bind_text(stmt, 2, ingredients[i], -1, NULL);
+            rc = sqlite3_bind_int(stmt, 3, (int)j++);
 
             rc = sqlite3_step(stmt);
             if (rc != SQLITE_DONE) {
@@ -519,7 +520,58 @@ int ingredients_insert(struct kvpairs *form, s64 rowid)
 // steps_insert: inserts all of the available steps, in the right order
 int steps_insert(struct kvpairs *form, s64 rowid)
 {
+	struct kvpair *pair;
+    sqlite3_stmt *stmt;
+	char *steps[512];
+	size_t i, j;
+	size_t idx;
+    char *sql;
+	char *s;
+    int rc;
+
+	memset(steps, 0, sizeof steps);
+
+	for (i = 0; i < form->kvpair_len; i++) { // gather all of the steps
+		pair = form->kvpair + i;
+		if (regex("steps[.*]", pair->k)) {
+			s = strchr(pair->k, '[') + 1;
+			idx = atoi(s);
+			if (idx < 512 && !steps[idx]) {
+				steps[idx] = pair->v;
+			} else {
+				ERR("user sent out of bounds or duplicate index '%ld\n", i);
+			}
+		}
+	}
+
+    sql = "insert into step (recipe_id, text, sort) values ((select id from recipe where rowid = ?), ?, ?);";
+
+	for (i = j = 0; i < 512; i++) {
+		if (steps[i]) {
+            rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+            if (rc != SQLITE_OK) {
+                SQLITE_ERRMSG(rc);
+                sqlite3_finalize(stmt);
+                return -1;
+            }
+
+            rc = sqlite3_bind_int64(stmt, 1, rowid);
+            rc = sqlite3_bind_text(stmt, 2, steps[i], -1, NULL);
+            rc = sqlite3_bind_int(stmt, 3, (int)j++);
+
+            rc = sqlite3_step(stmt);
+            if (rc != SQLITE_DONE) {
+                SQLITE_ERRMSG(rc);
+                sqlite3_finalize(stmt);
+                return -1;
+            }
+
+            sqlite3_finalize(stmt);
+        }
+	}
+
 	return 0;
+
 }
 
 // tags_insert: inserts all of the tags
