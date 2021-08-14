@@ -30,10 +30,13 @@ function validate() {
     const password = element("password");
     const verify_password = element("verify-password");
 
+    // NOTE (Brian) this must mirror exactly the rules in the backend, otherwise we'll be sending
+    // mixed signals to the user.
+
     let is_valid = true;
 
     const focus_if_needed = (elem) => {
-        if (!is_valid) {
+        if (is_valid) {
             elem.focus();
             is_valid = false;
         }

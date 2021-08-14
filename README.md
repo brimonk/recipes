@@ -29,11 +29,10 @@ Honestly, just watch some of Handmade Hero, and you'll probably get why.
 
 ### In Progress
 
-* New User Create
+* User Login
 
 ### To Do (Features)
 
-* User Login
 * User Session Cookie
 * User Logout
 * Login Form
@@ -44,6 +43,8 @@ Honestly, just watch some of Handmade Hero, and you'll probably get why.
 * Forgot Password
 * Email Verification for Login Stuff
 * Profile Pictures?
+* HTML Templating (tables and things get easier)
+* Correct UTF-8/16 Support
 
 ### To Do (Cleanup)
 
@@ -52,6 +53,7 @@ Honestly, just watch some of Handmade Hero, and you'll probably get why.
 * Nav Bar / Collapsable Menu
 * Should we be sending a 503 every time a function errors?
 * Can we statically allocate the form data? You get 1024 form k/v pairs, and that's it?
+* Good Error Messages
 
 ### To Do (Performance)
 

@@ -87,8 +87,9 @@ int get_codepoint(char *s);
 // xctoi: converts a hex char (ascii) to the corresponding integer value
 int xctoi(char v);
 
-// SERVER FUNCTIONS
-// exercise_post: handles the POSTing of an exercise record
+// RECIPE FUNCTIONS
+//   SERVER FUNCTIONS
+// recipe_post: handles the POSTing of a recipe record
 int recipe_post(struct http_request_s *req, struct http_response_s *res);
 
 // recipe_put: handles the PUTting of a recipe record
@@ -100,7 +101,7 @@ int recipe_delete(struct http_request_s *req, struct http_response_s *res);
 // recipe_validation: returns true if the form fits a recipe
 int recipe_validation(struct kvpairs *form);
 
-// DATABASE FUNCTIONS
+//   DATABASE FUNCTIONS
 // recipe_insert: inserts the recipe from the form into the database
 int recipe_insert(struct kvpairs *form);
 
@@ -112,6 +113,17 @@ int steps_insert(struct kvpairs *form, s64 rowid);
 
 // tags_insert: inserts all of the tags
 int tags_insert(struct kvpairs *form, s64 rowid);
+
+// USER FUNCTIONS
+//   SERVER FUNCTIONS
+// user_post: handles the POSTing of a new user record
+int user_post(struct http_request_s *req, struct http_response_s *res);
+
+// user_insert: handles the inserting of a user
+int user_insert(struct kvpairs *form);
+
+// user_validation: returns true if this is a valid user form
+int user_validation(struct kvpairs *form);
 
 #define SQLITE_ERRMSG(x) (fprintf(stderr, "Error: %s\n", sqlite3_errstr(rc)))
 
@@ -243,6 +255,14 @@ void request_handler(struct http_request_s *req)
     } else if (rcheck(req, "/newuser", "POST")) {
         rc = user_post(req, res);
         CHKERR(503);
+
+    // } else if (rcheck(req, "/login", "GET")) {
+    //     rc = send_file(req, res, "html/login.html");
+    //     CHKERR(503);
+
+    // } else if (rcheck(req, "/login", "POST")) {
+    //     rc = user_login(req, res);
+    //     CHKERR(503);
 
 	// static files, unrelated to main CRUD operations
 	} else if (rcheck(req, "/style.css", "GET")) {
@@ -705,7 +725,6 @@ int user_post(struct http_request_s *req, struct http_response_s *res)
 {
     struct kvpairs form;
     struct http_string_s body;
-    s64 rowid;
     int rc;
 
     body = http_request_body(req);
@@ -723,6 +742,9 @@ int user_post(struct http_request_s *req, struct http_response_s *res)
         goto user_post_error;
     }
 
+	// send a simple success page
+	send_file(req, res, "html/success.html");
+
     return 0;
 
 user_post_error:
@@ -734,6 +756,11 @@ user_post_error:
 int user_insert(struct kvpairs *form)
 {
     sqlite3_stmt *stmt;
+    char hash[crypto_pwhash_STRBYTES];
+    char *username;
+    char *email;
+    char *passwd;
+    char *sql;
     int rc;
 
     // NOTE (Brian) because of password generation, this is a computationally
@@ -741,6 +768,34 @@ int user_insert(struct kvpairs *form)
     // become multi-threaded sooner than later, it'll be this one.
     //
     // You've been warned.
+
+    username = getv(form, "username");
+    email = getv(form, "email");
+    passwd = getv(form, "password");
+
+    rc = crypto_pwhash_str(hash, passwd, strlen(passwd), 3, 1 << 20);
+    if (rc < 0) {
+        return -1;
+    }
+
+    sql = "insert into user (username, email, password) values (?,?,?);";
+
+    rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        return -1;
+    }
+
+    sqlite3_bind_text(stmt, 1, username, -1, NULL);
+    sqlite3_bind_text(stmt, 2, email, -1, NULL);
+    sqlite3_bind_text(stmt, 3, passwd, -1, NULL);
+
+    rc = sqlite3_step(stmt);
+    if (rc != SQLITE_DONE) {
+        SQLITE_ERRMSG(rc);
+        return -1;
+    }
+
+    sqlite3_finalize(stmt);
 
     return 0;
 }
@@ -750,6 +805,51 @@ int user_validation(struct kvpairs *form)
 {
     // NOTE (Brian) this NEEDS to mirror the exact rules in html/newuser.js
     // otherwise, we'll be sending mixed signals.
+
+    char *username;
+    char *email;
+    char *passwd;
+    char *verify_passwd;
+
+    username = getv(form, "username");
+    email = getv(form, "email");
+    passwd = getv(form, "password");
+    verify_passwd = getv(form, "verify-password");
+
+    // username
+    if (username == NULL) {
+        return -1;
+    } else if (strlen(username) == 0) {
+        return -1;
+    } else if (strlen(username) > 50) {
+        return -1;
+    } else if (strchr(username, ' ') != NULL) {
+        return -1;
+    }
+
+    // email
+    if (email == NULL) {
+        return -1;
+    } else if (strlen(email) == 0) {
+        return -1;
+    }
+    // TODO (Brian) email regex
+
+    // password
+    if (passwd == NULL) {
+        return -1;
+    } else if (strlen(passwd) < 6) {
+        return -1;
+    }
+
+    // verify_password
+    if (verify_passwd == NULL) {
+        return -1;
+    } else if (strlen(verify_passwd) == 0) {
+        return -1;
+    } else if (strcmp(passwd, verify_passwd) != 0) {
+        return -1;
+    }
 
     return 1;
 }

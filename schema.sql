@@ -10,10 +10,13 @@ create table if not exists user
     , username   text not null
     , password   text not null
     , email      text not null
+
     , is_verified int default (0)
 );
 
 create unique index if not exists idx_user_id on user(id);
+create unique index if not exists idx_user_name on user(username);
+create unique index if not exists idx_user_email on user(email);
 
 create table if not exists recipe
 (
