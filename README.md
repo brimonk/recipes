@@ -29,13 +29,11 @@ Honestly, just watch some of Handmade Hero, and you'll probably get why.
 
 ### In Progress
 
-* User Login
+* Login Form
 
 ### To Do (Features)
 
-* User Session Cookie
 * User Logout
-* Login Form
 * Recipe Edit
 * Recipe Delete
 * Pictures Support
@@ -51,7 +49,7 @@ Honestly, just watch some of Handmade Hero, and you'll probably get why.
 * CSS wrapper classes for tailwind
 * Tailwind in-repo
 * Nav Bar / Collapsable Menu
-* Should we be sending a 503 every time a function errors?
+* Generally better way to handle errors
 * Can we statically allocate the form data? You get 1024 form k/v pairs, and that's it?
 * Good Error Messages
 
@@ -64,6 +62,13 @@ Honestly, just watch some of Handmade Hero, and you'll probably get why.
 
 * Validate our inputs against SQL injection
 * Validate behavior against popular attacks
+* Validate memory frees, etc. with Valgrind
+
+#### Production Ready
+
+* Ensure our session cookie has `Secure`
+* Ensure our session cookie has `HttpOnly`
+* Ensure our session cookie has `SameSite=Strict`
 
 ### To Do (UX)
 

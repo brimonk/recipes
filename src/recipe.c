@@ -125,6 +125,12 @@ int user_insert(struct kvpairs *form);
 // user_validation: returns true if this is a valid user form
 int user_validation(struct kvpairs *form);
 
+// user_login: logs the user in
+int user_login(struct http_request_s *req, struct http_response_s *res);
+
+// user_setcookie: sets up a safe cookie with a 32 byte integer as the user's session id
+int user_setcookie(struct http_response_s *res, char *id);
+
 #define SQLITE_ERRMSG(x) (fprintf(stderr, "Error: %s\n", sqlite3_errstr(rc)))
 
 #define USAGE ("USAGE: %s <dbname>\n")
@@ -256,13 +262,13 @@ void request_handler(struct http_request_s *req)
         rc = user_post(req, res);
         CHKERR(503);
 
-    // } else if (rcheck(req, "/login", "GET")) {
-    //     rc = send_file(req, res, "html/login.html");
-    //     CHKERR(503);
+    } else if (rcheck(req, "/login", "GET")) {
+        rc = send_file(req, res, "html/login.html");
+        CHKERR(503);
 
-    // } else if (rcheck(req, "/login", "POST")) {
-    //     rc = user_login(req, res);
-    //     CHKERR(503);
+    } else if (rcheck(req, "/login", "POST")) {
+        rc = user_login(req, res);
+        CHKERR(503);
 
 	// static files, unrelated to main CRUD operations
 	} else if (rcheck(req, "/style.css", "GET")) {
@@ -276,6 +282,153 @@ void request_handler(struct http_request_s *req)
 	} else {
         SNDERR(404);
 	}
+}
+
+// user_login: logs the user in
+int user_login(struct http_request_s *req, struct http_response_s *res)
+{
+    struct http_string_s body;
+    struct kvpairs form;
+    sqlite3_stmt *stmt;
+    char *username;
+    char *passwd;
+    char *sql;
+    char *hash;
+    char *id;
+    int rc;
+
+    body = http_request_body(req);
+
+    form = parse_url_encoded(body);
+
+    username = getv(&form, "username");
+    passwd = getv(&form, "password");
+
+    if (username == NULL || passwd == NULL) {
+        return -1;
+    }
+
+    // first, we have to get the password
+
+    sql = "select id, password from user where username = ?;";
+
+    rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        SQLITE_ERRMSG(rc);
+        goto user_login_error;
+    }
+
+    sqlite3_bind_text(stmt, 1, username, -1, NULL);
+
+    rc = sqlite3_step(stmt);
+
+    id = strdup((char *)sqlite3_column_text(stmt, 0));
+    hash = strdup((char *)sqlite3_column_text(stmt, 1));
+
+    sqlite3_finalize(stmt);
+
+    // now, we'll check it against the password we got
+    // if they match, you can be logged in
+    // if not, we'll send you to the error page temporarily
+    if (crypto_pwhash_str_verify(hash, passwd, strlen(passwd)) == -1) {
+        goto user_login_error;
+    }
+
+    // now that we're past this, we have to set the user cookie, and like,
+    // redirect them to the home page
+
+    rc = user_setcookie(res, id);
+    if (rc < 0) {
+        return -1;
+    }
+
+    send_file(req, res, "html/success.html");
+
+    return 0;
+
+user_login_error:
+    sqlite3_finalize(stmt);
+    free_kvpairs(form);
+    return -1;
+}
+
+// user_setcookie: sets up a safe cookie with a 32 byte integer as the user's session id
+int user_setcookie(struct http_response_s *res, char *id)
+{
+    unsigned char session_id[32];
+    char session_base64[128];
+    char cookie[BUFLARGE];
+    sqlite3_stmt *stmt;
+    char *sql;
+    int rc;
+
+    sodium_memzero(session_id, sizeof session_id);
+    randombytes_buf(session_id, sizeof session_id);
+
+    sql = "insert into user_session(user_id, session_id) values (?,?);";
+
+    rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        return -1;
+    }
+
+    sqlite3_bind_text(stmt, 1, id, -1, NULL);
+    sqlite3_bind_blob(stmt, 2, session_id, sizeof session_id, NULL);
+
+    rc = sqlite3_step(stmt);
+    if (rc != SQLITE_DONE) {
+        SQLITE_ERRMSG(rc);
+        sqlite3_finalize(stmt);
+        return -1;
+    }
+
+    sqlite3_finalize(stmt);
+
+    // now that we have the session cookie, we can set it up, and send it to the user
+    // we're setting
+    //
+    //   id=session_id
+    //   Max-Age=(3600 * 24 * 7) (7 days)
+    //
+    // and in production, we're going to need to add the following attributes
+    //
+    //   Secure
+    //   HttpOnly
+    //   SameSite=Strict
+
+    memset(cookie, 0, sizeof cookie);
+
+    s32 variant;
+
+    variant = sodium_base64_VARIANT_URLSAFE_NO_PADDING;
+
+    {
+        s32 len;
+        len = sodium_base64_ENCODED_LEN(sizeof session_id, variant);
+        assert(sizeof session_base64 >= len);
+    }
+
+    sodium_bin2base64(session_base64, sizeof session_base64, session_id, sizeof session_id, variant);
+
+#define MAX_AGE (60 * 60 * 24 * 7)
+
+#if 1
+#define FMT_STR ("id=%s; Max-Age=%d")
+    snprintf(cookie, sizeof cookie, FMT_STR, session_base64, MAX_AGE);
+#undef FMT_STR
+#else
+#define FMT_STR ("id=%s; Max-Age=%d; Secure; HttpOnly; SameSite=Strict")
+    snprintf(cookie, sizeof cookie, FMT_STR, session_base64, age);
+#undef FMT_STR
+#endif
+
+#undef MAX_AGE
+
+    printf("cookie is -- Set-Cookie: %s\n", cookie);
+
+    http_response_header(res, "Set-Cookie", cookie);
+
+    return 0;
 }
 
 // get_list: returns the list page for a given table
@@ -742,8 +895,8 @@ int user_post(struct http_request_s *req, struct http_response_s *res)
         goto user_post_error;
     }
 
-	// send a simple success page
-	send_file(req, res, "html/success.html");
+    // now that we have a user, we want to log that person in
+    user_login(req, res);
 
     return 0;
 
@@ -763,12 +916,6 @@ int user_insert(struct kvpairs *form)
     char *sql;
     int rc;
 
-    // NOTE (Brian) because of password generation, this is a computationally
-    // intensive function. If there's anything that'll force this server to
-    // become multi-threaded sooner than later, it'll be this one.
-    //
-    // You've been warned.
-
     username = getv(form, "username");
     email = getv(form, "email");
     passwd = getv(form, "password");
@@ -787,7 +934,7 @@ int user_insert(struct kvpairs *form)
 
     sqlite3_bind_text(stmt, 1, username, -1, NULL);
     sqlite3_bind_text(stmt, 2, email, -1, NULL);
-    sqlite3_bind_text(stmt, 3, passwd, -1, NULL);
+    sqlite3_bind_text(stmt, 3, hash, -1, NULL);
 
     rc = sqlite3_step(stmt);
     if (rc != SQLITE_DONE) {
