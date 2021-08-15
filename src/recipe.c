@@ -266,6 +266,10 @@ void request_handler(struct http_request_s *req)
         rc = send_file(req, res, "html/login.html");
         CHKERR(503);
 
+	} else if (rcheck(req, "/login.js", "GET")) {
+		rc = send_file(req, res, "html/login.js");
+		CHKERR(503);
+
     } else if (rcheck(req, "/login", "POST")) {
         rc = user_login(req, res);
         CHKERR(503);
@@ -423,8 +427,6 @@ int user_setcookie(struct http_response_s *res, char *id)
 #endif
 
 #undef MAX_AGE
-
-    printf("cookie is -- Set-Cookie: %s\n", cookie);
 
     http_response_header(res, "Set-Cookie", cookie);
 
