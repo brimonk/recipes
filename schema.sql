@@ -29,6 +29,7 @@ create table if not exists user_session
 );
 
 create unique index if not exists idx_usersession_id on user_session(user_id);
+create unique index if not exists idx_usersession_session on user_session(session_id);
 
 create table if not exists recipe
 (

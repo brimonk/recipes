@@ -29,34 +29,33 @@ Honestly, just watch some of Handmade Hero, and you'll probably get why.
 
 ### In Progress
 
-* Login Form
-
 ### To Do (Features)
 
-* User Logout
 * Recipe Edit
 * Recipe Delete
 * Pictures Support
 * Ratings / Comments
-* Forgot Password
-* Email Verification for Login Stuff
 * Profile Pictures?
-* HTML Templating (tables and things get easier)
-* Correct UTF-8/16 Support
+
+### To Do (Account)
+
+* Email Verification for Login Stuff
+* Forgot Password
 
 ### To Do (Cleanup)
 
 * CSS wrapper classes for tailwind
-* Tailwind in-repo
+* Tailwind / Style Sheet In-Repo
 * Nav Bar / Collapsable Menu
 * Generally better way to handle errors
 * Can we statically allocate the form data? You get 1024 form k/v pairs, and that's it?
 * Good Error Messages
+* Set Expirations for Static Files
 
 ### To Do (Performance)
 
-* Each request should be processed in < 10ms
-* Each page navigation should be processed in < 10ms (with network considerations)
+* Replace the HTTP Parser (scalar)
+* Replace the HTTP Parser (SSE2)
 
 ### To Do (Security)
 

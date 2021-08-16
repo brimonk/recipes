@@ -131,6 +131,9 @@ int user_login(struct http_request_s *req, struct http_response_s *res);
 // user_setcookie: sets up a safe cookie with a 32 byte integer as the user's session id
 int user_setcookie(struct http_response_s *res, char *id);
 
+// user_logout: logs the user out
+int user_logout(struct http_request_s *req, struct http_response_s *res);
+
 #define SQLITE_ERRMSG(x) (fprintf(stderr, "Error: %s\n", sqlite3_errstr(rc)))
 
 #define USAGE ("USAGE: %s <dbname>\n")
@@ -274,6 +277,10 @@ void request_handler(struct http_request_s *req)
         rc = user_login(req, res);
         CHKERR(503);
 
+    } else if (rcheck(req, "/logout", "GET")) {
+        rc = user_logout(req, res);
+        CHKERR(503);
+
 	// static files, unrelated to main CRUD operations
 	} else if (rcheck(req, "/style.css", "GET")) {
 		rc = send_file(req, res, "html/style.css");
@@ -286,6 +293,81 @@ void request_handler(struct http_request_s *req)
 	} else {
         SNDERR(404);
 	}
+}
+
+// user_logout: logs the user out
+int user_logout(struct http_request_s *req, struct http_response_s *res)
+{
+    sqlite3_stmt *stmt;
+    struct http_string_s h_cookie;
+    char cookie[128];
+    // char *username;
+    char *sql;
+    unsigned char blob[256];
+    int variant;
+    int rc;
+
+    // NOTE (Brian) deletes the user's session record, and unsets the cookie
+
+    variant = sodium_base64_VARIANT_URLSAFE_NO_PADDING;
+
+    h_cookie = http_request_header(req, "Cookie");
+
+    if (sizeof cookie < h_cookie.len) {
+        return -1;
+    }
+
+    // TODO (Brian) this is super gross code, don't ship with this, it literally won't do the thing
+    // all the time
+    //
+    // NO FOR REAL, THIS WILL NOT PROVIDE THE COOKIE AUTHORIZATION THAT WE NEED FOR PRODUCTION USE
+
+    if (h_cookie.len >= 3 && !(h_cookie.buf[0] == 'i' && h_cookie.buf[1] == 'd' && h_cookie.buf[2] == '=')) {
+        return -1;
+    }
+
+    memset(cookie, 0, sizeof cookie);
+    memcpy(cookie, h_cookie.buf + 3, h_cookie.len - 3);
+
+    int len;
+    len = strlen(cookie) / 4 * 3;
+    assert(sizeof blob >= len); // TODO (Brian) handle the case where the user's cookie is too big
+
+    size_t bin_len;
+    char *bin_end;
+
+    rc = sodium_base642bin(blob, sizeof blob, cookie, strlen(cookie), NULL, &bin_len, (const char ** const)&bin_end, variant);
+    if (rc < 0) {
+        printf("parse error!\n");
+        if (bin_end == NULL) {
+            printf("bin end is null?\n");
+        } else {
+            printf("end is %ld bytes off\n", bin_end - (char *)blob);
+        }
+        // TODO (Brian) what?
+    }
+
+    sql = "delete from user_session where user_id = (select user_id from user_session where session_id = ?);";
+
+    rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        SQLITE_ERRMSG(rc);
+        sqlite3_finalize(stmt);
+        return -1;
+    }
+
+    sqlite3_bind_blob(stmt, 1, blob, bin_len, NULL);
+
+    rc = sqlite3_step(stmt);
+    if (rc != SQLITE_DONE) {
+        SQLITE_ERRMSG(rc);
+        sqlite3_finalize(stmt);
+        return -1;
+    }
+
+    send_file(req, res, "html/success.html");
+
+    return 0;
 }
 
 // user_login: logs the user in
