@@ -290,6 +290,10 @@ void request_handler(struct http_request_s *req)
 		rc = send_file(req, res, "html/index.html");
         CHKERR(503);
 
+	} else if (rcheck(req, "/ui.js", "GET")) {
+		rc = send_file(req, res, "html/ui.js");
+        CHKERR(503);
+
 	} else {
         SNDERR(404);
 	}
