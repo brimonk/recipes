@@ -1,0 +1,28 @@
+{
+	"name": "recipes.chrzanowski",
+	"version": "1.0.0",
+	"description": "This is my recipe website.",
+	"main": "index.js",
+	"scripts": {
+		"test": "echo \"Error: no test specified\" && exit 1",
+		"start": "webpack ./ui/index.js -o bin -d eval --watch --mode development"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/brimonk/recipes.git"
+	},
+	"keywords": [],
+	"author": "",
+	"license": "ISC",
+	"bugs": {
+		"url": "https://github.com/brimonk/recipes/issues"
+	},
+	"homepage": "https://github.com/brimonk/recipes#readme",
+	"dependencies": {
+		"mithril": "^2.0.4"
+	},
+	"devDependencies": {
+		"webpack": "^5.52.0",
+		"webpack-cli": "^4.8.0"
+	}
+}

@@ -11,6 +11,12 @@ PORT=5000
 
 all: $(TARGET) ext_uuid.so
 
+watch:
+	while true; do \
+		make $(WATCHMAKE); \
+		inotifywait -qre close_write .; \
+	done
+
 %.d: %.c
 	@$(CC) $(CFLAGS) $< -MM -MT $(@:.d=.o) >$@
 
@@ -25,11 +31,11 @@ ext_uuid.so: src/sqlite3.o src/uuid.o
 $(TARGET): src/sqlite3.o src/recipe.o
 	$(CC) $(CFLAGS) -o $(TARGET) $^ $(LINKER)
 
-clean: clean-obj clean-bin
+node_modules: ./node_modules
+	npm i
 
-clean-obj:
+clean:
 	rm -f $(OBJ) $(DEP)
-	
-clean-bin:
 	rm -f $(TARGET) ext_uuid.so
+	rm -rf node_modules/
 
