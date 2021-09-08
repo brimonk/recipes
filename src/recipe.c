@@ -121,6 +121,12 @@ struct object *object_a(struct object *object, char *path);
 // object_from_path: locates the object with 'path'
 struct object *object_from_path(struct object *root, char *path);
 
+// user_fromjson: creates a user from a json string input
+struct user *user_fromjson(char *s, size_t len);
+
+// user_free: frees the user object
+void user_free(struct user *user);
+
 // create_tables: execs create * statements on the database
 int create_tables(sqlite3 *db, char *fname);
 
@@ -193,13 +199,13 @@ int tags_insert(struct kvpairs *form, s64 rowid);
 int user_post(struct http_request_s *req, struct http_response_s *res);
 
 // user_insert: handles the inserting of a user
-int user_insert(struct kvpairs *form);
+int user_insert(struct user *user);
 
 // user_validation: returns true if this is a valid user form
-int user_validation(struct kvpairs *form);
+int user_validation(struct user *user);
 
 // user_login: logs the user in
-int user_login(struct http_request_s *req, struct http_response_s *res);
+int user_login(struct http_request_s *req, struct http_response_s *res, struct user *user);
 
 // user_setcookie: sets up a safe cookie with a 32 byte integer as the user's session id
 int user_setcookie(struct http_response_s *res, char *id);
@@ -429,26 +435,20 @@ int user_logout(struct http_request_s *req, struct http_response_s *res)
 }
 
 // user_login: logs the user in
-int user_login(struct http_request_s *req, struct http_response_s *res)
+int user_login(struct http_request_s *req, struct http_response_s *res, struct user *user)
 {
-    struct http_string_s body;
-    struct kvpairs form;
     sqlite3_stmt *stmt;
     char *username;
-    char *passwd;
-    char *sql;
-    char *hash;
+    char *password;
     char *id;
+    char *hash;
+    char *sql;
     int rc;
 
-    body = http_request_body(req);
+    username = user->username;
+    password = user->password;
 
-    form = parse_url_encoded(body);
-
-    username = getv(&form, "username");
-    passwd = getv(&form, "password");
-
-    if (username == NULL || passwd == NULL) {
+    if (username == NULL || password == NULL) {
         return -1;
     }
 
@@ -474,7 +474,7 @@ int user_login(struct http_request_s *req, struct http_response_s *res)
     // now, we'll check it against the password we got
     // if they match, you can be logged in
     // if not, we'll send you to the error page temporarily
-    if (crypto_pwhash_str_verify(hash, passwd, strlen(passwd)) == -1) {
+    if (crypto_pwhash_str_verify(hash, password, strlen(password)) == -1) {
         goto user_login_error;
     }
 
@@ -486,13 +486,14 @@ int user_login(struct http_request_s *req, struct http_response_s *res)
         return -1;
     }
 
+    // TODO (Brian) probably don't want to send the success file anymore
+
     send_file(req, res, "html/success.html");
 
     return 0;
 
 user_login_error:
     sqlite3_finalize(stmt);
-    free_kvpairs(form);
     return -1;
 }
 
@@ -1018,68 +1019,52 @@ int recipe_validation(struct kvpairs *form)
 // user_post: handles the POSTing of a new user record
 int user_post(struct http_request_s *req, struct http_response_s *res)
 {
-    struct kvpairs form;
+    struct user *user;
     struct http_string_s body;
-    jsmn_parser parser;
-    jsmntok_t tokens[128];
     int rc;
-
-    jsmn_init(&parser);
 
     body = http_request_body(req);
 
-    rc = jsmn_parse(&parser, body.buf, body.len, tokens, ARRSIZE(tokens));
-
-#if 1
-    int i;
-
-    for (i = 0; i < rc; i++) {
-        printf("type : %d\n", tokens[i].type);
-        printf("%d : %.*s\n", i, tokens[i].end - tokens[i].start, body.buf + tokens[i].start);
+    user = user_fromjson((char *)body.buf, body.len);
+    if (user == NULL) {
+        ERR("could not create user object from JSON input!");
+        return -1;
     }
 
-    return 0;
-#else
-    form = parse_url_encoded(body);
-
-    if (!user_validation(&form)) {
-        ERR("invalid user form data!\n");
-        goto user_post_error;
+    if (user_validation(user) < 0) {
+        ERR("user object invalid!");
+        user_free(user);
+        return -1;
     }
 
-    rc = user_insert(&form);
+    rc = user_insert(user);
     if (rc < 0) {
-        ERR("couldn't insert a user!\n");
-        goto user_post_error;
+        ERR("couldn't insert the user!");
+        user_free(user);
+        return -1;
     }
 
-    // now that we have a user, we want to log that person in
-    user_login(req, res);
+    rc = user_login(req, res, user);
+    if (rc < 0) {
+        ERR("couldn't log the user in!");
+        user_free(user);
+        return -1;
+    }
+
+    user_free(user);
 
     return 0;
-
-user_post_error:
-    free_kvpairs(form);
-    return -1;
-#endif
 }
 
 // user_insert: handles the inserting of a user
-int user_insert(struct kvpairs *form)
+int user_insert(struct user *user)
 {
     sqlite3_stmt *stmt;
     char hash[crypto_pwhash_STRBYTES];
-    char *username;
-    char *email;
-    char *passwd;
     char *sql;
     int rc;
 
-    username = getv(form, "username");
-    email = getv(form, "email");
-    passwd = getv(form, "password");
-
-    rc = crypto_pwhash_str(hash, passwd, strlen(passwd), 3, 1 << 20);
+    rc = crypto_pwhash_str(hash, user->password, strlen(user->password), 3, 1 << 20);
     if (rc < 0) {
         return -1;
     }
@@ -1091,8 +1076,8 @@ int user_insert(struct kvpairs *form)
         return -1;
     }
 
-    sqlite3_bind_text(stmt, 1, username, -1, NULL);
-    sqlite3_bind_text(stmt, 2, email, -1, NULL);
+    sqlite3_bind_text(stmt, 1, user->username, -1, NULL);
+    sqlite3_bind_text(stmt, 2, user->email, -1, NULL);
     sqlite3_bind_text(stmt, 3, hash, -1, NULL);
 
     rc = sqlite3_step(stmt);
@@ -1107,57 +1092,44 @@ int user_insert(struct kvpairs *form)
 }
 
 // user_validation: returns true if this is a valid user form
-int user_validation(struct kvpairs *form)
+int user_validation(struct user *user)
 {
-    // NOTE (Brian) this NEEDS to mirror the exact rules in html/newuser.js
-    // otherwise, we'll be sending mixed signals.
-
-    char *username;
-    char *email;
-    char *passwd;
-    char *verify_passwd;
-
-    username = getv(form, "username");
-    email = getv(form, "email");
-    passwd = getv(form, "password");
-    verify_passwd = getv(form, "verify-password");
-
     // username
-    if (username == NULL) {
+    if (user->username == NULL) {
         return -1;
-    } else if (strlen(username) == 0) {
+    } else if (strlen(user->username) == 0) {
         return -1;
-    } else if (strlen(username) > 50) {
+    } else if (strlen(user->username) > 50) {
         return -1;
-    } else if (strchr(username, ' ') != NULL) {
+    } else if (strchr(user->username, ' ') != NULL) {
         return -1;
     }
 
     // email
-    if (email == NULL) {
+    if (user->email == NULL) {
         return -1;
-    } else if (strlen(email) == 0) {
+    } else if (strlen(user->email) == 0) {
         return -1;
     }
     // TODO (Brian) email regex
 
     // password
-    if (passwd == NULL) {
+    if (user->password == NULL) {
         return -1;
-    } else if (strlen(passwd) < 6) {
+    } else if (strlen(user->password) < 6) {
         return -1;
     }
 
     // verify_password
-    if (verify_passwd == NULL) {
+    if (user->verify == NULL) {
         return -1;
-    } else if (strlen(verify_passwd) == 0) {
+    } else if (strlen(user->verify) == 0) {
         return -1;
-    } else if (strcmp(passwd, verify_passwd) != 0) {
+    } else if (strcmp(user->password, user->verify) != 0) {
         return -1;
     }
 
-    return 1;
+    return 0;
 }
 
 // send_file: sends the file in the request, coalescing to '/index.html' from "html/"
@@ -1402,9 +1374,23 @@ struct user *user_fromjson(char *s, size_t len)
     user->verify = object_s(object, ".verify");
     user->email = object_s(object, ".email");
 
+    printf("username : %s\n", user->username);
+
     object_free(object);
 
     return user;
+}
+
+// user_free: frees the user object
+void user_free(struct user *user)
+{
+    if (user) {
+        free(user->username);
+        free(user->password);
+        free(user->verify);
+        free(user->email);
+        free(user);
+    }
 }
 
 // object_t: locates the object with 'path', returns the type
@@ -1522,9 +1508,9 @@ struct object *object_from_json(char *s, size_t len)
 struct object *object_from_tokens(char *s, jsmntok_t *tokens, size_t len)
 {
     struct object *object;
-    char *curr;
-    size_t keylen;
-    size_t vallen;
+    struct object *curr;
+    size_t i;
+    char *vstr;
 
     jsmntok_t key, val;
 
@@ -1532,17 +1518,17 @@ struct object *object_from_tokens(char *s, jsmntok_t *tokens, size_t len)
         return NULL;
     }
 
+    printf("len - %ld\n", len);
+
+    object = calloc(1, sizeof(*object));
+
     // do things based on what the key is
     if (tokens[0].type == JSMN_OBJECT) {
-        object = calloc(1, sizeof(*object));
-
         object->type = OBJECT_OBJECT;
 
         object->child = object_from_tokens(s, tokens + 1, tokens[0].size);
         object->child->parent = object;
     } else if (tokens[0].type == JSMN_ARRAY) {
-        object = calloc(1, sizeof(*object));
-
         object->type = OBJECT_ARRAY;
 
         object->child = object_from_tokens(s, tokens + 1, tokens[0].size);
@@ -1550,30 +1536,45 @@ struct object *object_from_tokens(char *s, jsmntok_t *tokens, size_t len)
     } else {
 
         // NOTE (Brian): here's the part where we parse all of the k/v pairs of the JSON object.
+        // It's the case that when we get into this block, 'len' has the number of tokens left to
+        // parse. Given that while in this block we parse two tokens at a time (key and value), we
+        // simply continue until we have < 1 tokens, then we return
+        //
+        // Also, the +1/-1 in the string gathering parts are to skip over double quote chars in the
+        // JSON.
 
-        key = tokens[0];
-        val = tokens[1];
+        curr = object;
 
-        keylen = key.end - key.start;
-        vallen = val.end - val.start;
+        for (i = 0; i < len; i++) {
+            if (0 < i) {
+                curr->next = calloc(1, sizeof(*curr->next));
+                curr = curr->next;
+            }
 
-        object = calloc(1, sizeof(*object));
+            key = tokens[i * 2 + 0];
+            val = tokens[i * 2 + 1];
 
-        curr = s + val.start;
+            printf("parsing key '%.*s'\n", key.end - key.start, s + key.start);
+            printf("parsing val '%.*s'\n", val.end - val.start, s + val.start);
 
-        object->k = strndup(s + key.start, keylen);
+            vstr = s + val.start;
 
-        if (val.type == JSMN_STRING) {
-            object->type = OBJECT_STRING;
-            object->v_string = strndup(s + val.start, val.end - val.start);
-        } else if (curr[0] == 't' || curr[0] == 'f') { // check if value is boolean
-            object->type = OBJECT_BOOL;
-            object->v_bool = curr[0] == 't';
-        } else if (isdigit(curr[0]) || curr[0] == '-') { // check if value is number
-            object->type = OBJECT_NUM;
-            object->v_num = atof(s + val.start);
-        } else if (curr[0] == 'n') {
-            object->type = OBJECT_NULL;
+            curr->k = strndup(s + key.start, key.end - key.start);
+
+            if (val.type == JSMN_STRING) {
+                curr->type = OBJECT_STRING;
+                curr->v_string = strndup(s + val.start, val.end - val.start);
+            } else if (vstr[0] == 't' || vstr[0] == 'f') { // check if value is boolean
+                curr->type = OBJECT_BOOL;
+                curr->v_bool = vstr[0] == 't';
+            } else if (isdigit(vstr[0]) || vstr[0] == '-') { // check if value is number
+                curr->type = OBJECT_NUM;
+                curr->v_num = atof(s + val.start);
+            } else if (vstr[0] == 'n') { // if it's NULL
+                curr->type = OBJECT_NULL;
+            } else {
+                assert(0); // HOW???
+            }
         }
     }
 
