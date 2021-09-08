@@ -108,6 +108,8 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
+	while (1) {
+
 	init(argv[1], "schema.sql");
 
 	server = http_server_init(PORT, request_handler);
