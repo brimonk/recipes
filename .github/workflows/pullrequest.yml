@@ -11,9 +11,10 @@ jobs:
         runs-on: ubuntu-latest
 
         steps:
+            - name: install dependencies
             - uses: actions/checkout@v2
-            - name: make
-              run: |
-                  sudo apt-get install libsodium
-                  make
+            - run: sudo apt-get install libsodium-dev libmagic-dev
+            - name: build
+            - uses: actions/checkout@v2
+            - run: make
 
