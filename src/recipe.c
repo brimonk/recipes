@@ -16,21 +16,13 @@
 
 #define PORT (2000)
 
-struct kvpair {
-	char *k;
-	char *v;
-};
-
-struct kvpairs {
-	struct kvpair *kvpair;
-	size_t kvpair_len, kvpair_cap;
-};
+// OBJECT MANGLING ROUTINES
 
 enum {
     OBJECT_UNDEFINED,
     OBJECT_NULL,
     OBJECT_BOOL,
-    OBJECT_NUM,
+    OBJECT_NUMBER,
     OBJECT_STRING,
     OBJECT_OBJECT,
     OBJECT_ARRAY,
@@ -49,6 +41,56 @@ struct object {
     struct object *child;
     struct object *parent;
 };
+
+// object_ss: sets the type on 'object' to string, and sets v_string to 's'
+void object_ss(struct object *object, char *s);
+
+// object_ss: sets the type on 'object' to number, and sets v_num to 'n'
+void object_sn(struct object *object, f64 n);
+
+// object_sb: sets the type on 'object' to bool and sets v_bool to 'b'
+void object_sb(struct object *object, int b);
+
+// object_so: sets the type on 'object' to object and sets child to 'o'
+void object_so(struct object *object, struct object *o);
+
+// object_sa: sets the type on 'object' to array and sets child to 'a'
+void object_sa(struct object *object, struct object *a);
+
+// object_gt: locates the object with 'path', returns the type
+int object_gt(struct object *object, char *path);
+
+// object_gs: locates the object with 'path', returns the string
+char *object_gs(struct object *object, char *path);
+
+// object_gn: locates the object with 'path', returns the number
+double object_gn(struct object *object, char *path);
+
+// object_gb: locates the object with 'path', returns the boolean
+int object_gb(struct object *object, char *path);
+
+// object_go: finds the object with 'path', returns that object (NULL if it isn't an object)
+struct object *object_go(struct object *object, char *path);
+
+// object_ga: finds the object with 'path', returns that object (NULL if it's an array)
+struct object *object_ga(struct object *object, char *path);
+
+// object_deref: locates the object with 'path'
+struct object *object_deref(struct object *root, char *path);
+
+// object_deref_and_create: locates the object with 'path'
+struct object *object_deref_and_create(struct object **root, char *path);
+
+// object_from_json: creates an object from a list of json tokens
+struct object *object_from_json(char *s, size_t len);
+
+// object_from_tokens: recursive function building up the 'object' tree
+struct object *object_from_tokens(char *s, jsmntok_t *tokens, size_t len);
+
+// object_free: frees the object
+void object_free(struct object *object);
+
+// STATIC STUFF
 
 static magic_t MAGIC_COOKIE;
 
@@ -91,36 +133,6 @@ void init(char *db_file_name, char *sql_file_name);
 // cleanup: cleans up resources open so we can elegantly close the program
 void cleanup(void);
 
-// object_from_json: creates an object from a list of json tokens
-struct object *object_from_json(char *s, size_t len);
-
-// object_from_tokens: recursive function building up the 'object' tree
-struct object *object_from_tokens(char *s, jsmntok_t *tokens, size_t len);
-
-// object_free: frees the object
-void object_free(struct object *object);
-
-// object_t: locates the object with 'path', returns the type
-int object_t(struct object *object, char *path);
-
-// object_s: locates the object with 'path', returns the string
-char *object_s(struct object *object, char *path);
-
-// object_n: locates the object with 'path', returns the number
-double object_n(struct object *object, char *path);
-
-// object_b: locates the object with 'path', returns the boolean
-int object_b(struct object *object, char *path);
-
-// object_o: finds the object with 'path', returns that object (NULL if it isn't an object)
-struct object *object_o(struct object *object, char *path);
-
-// object_a: finds the object with 'path', returns that object (NULL if it's an array)
-struct object *object_a(struct object *object, char *path);
-
-// object_from_path: locates the object with 'path'
-struct object *object_from_path(struct object *root, char *path);
-
 // user_fromjson: creates a user from a json string input
 struct user *user_fromjson(char *s, size_t len);
 
@@ -140,13 +152,7 @@ void request_handler(struct http_request_s *req);
 int rcheck(struct http_request_s *req, char *target, char *method);
 
 // parse_url_encoded: parses the query out from the http_string_s
-struct kvpairs parse_url_encoded(struct http_string_s parseme);
-
-// free_kvpairs: frees a kvpairs array
-void free_kvpairs(struct kvpairs pairs);
-
-// getv: gets the value from a kvpair(s) given the key
-char *getv(struct kvpairs *pairs, char *k);
+struct object *parse_url_encoded(struct http_string_s parseme);
 
 // send_file: sends the file in the request, coalescing to '/index.html' from "html/"
 int send_file(struct http_request_s *req, struct http_response_s *res, char *path);
@@ -165,33 +171,6 @@ int get_codepoint(char *s);
 
 // xctoi: converts a hex char (ascii) to the corresponding integer value
 int xctoi(char v);
-
-// RECIPE FUNCTIONS
-//   SERVER FUNCTIONS
-// recipe_post: handles the POSTing of a recipe record
-int recipe_post(struct http_request_s *req, struct http_response_s *res);
-
-// recipe_put: handles the PUTting of a recipe record
-int recipe_put(struct http_request_s *req, struct http_response_s *res);
-
-// recipe_delete: handles the DELETEting of a recipe record
-int recipe_delete(struct http_request_s *req, struct http_response_s *res);
-
-// recipe_validation: returns true if the form fits a recipe
-int recipe_validation(struct kvpairs *form);
-
-//   DATABASE FUNCTIONS
-// recipe_insert: inserts the recipe from the form into the database
-int recipe_insert(struct kvpairs *form);
-
-// ingredients_insert: inserts all of the available ingredients
-int ingredients_insert(struct kvpairs *form, s64 rowid);
-
-// steps_insert: inserts all of the available steps, in the right order
-int steps_insert(struct kvpairs *form, s64 rowid);
-
-// tags_insert: inserts all of the tags
-int tags_insert(struct kvpairs *form, s64 rowid);
 
 // USER FUNCTIONS
 //   SERVER FUNCTIONS
@@ -311,35 +290,9 @@ void request_handler(struct http_request_s *req)
         rc = -1;
         CHKERR(503); // TODO (Brian) fix login too
 
-        /*
-	} else if (rcheck(req, "/newuser", "GET")) {
-		rc = send_file(req, res, "html/newuser.html");
-        CHKERR(503);
-
-	} else if (rcheck(req, "/newuser.js", "GET")) {
-		rc = send_file(req, res, "html/newuser.js");
-        CHKERR(503);
-
-    } else if (rcheck(req, "/newuser", "POST")) {
-        rc = user_post(req, res);
-        CHKERR(503);
-
-    } else if (rcheck(req, "/login", "GET")) {
-        rc = send_file(req, res, "html/login.html");
-        CHKERR(503);
-
-	} else if (rcheck(req, "/login.js", "GET")) {
-		rc = send_file(req, res, "html/login.js");
+	} else if (rcheck(req, "/api/v1/user/logout", "POST")) {
+		rc = -1;
 		CHKERR(503);
-
-    } else if (rcheck(req, "/login", "POST")) {
-        rc = user_login(req, res);
-        CHKERR(503);
-
-    } else if (rcheck(req, "/logout", "GET")) {
-        rc = user_logout(req, res);
-        CHKERR(503);
-        */
 
 	// static files, unrelated to main CRUD operations
 	} else if (rcheck(req, "/style.css", "GET")) {
@@ -577,6 +530,9 @@ int user_setcookie(struct http_response_s *res, char *id)
 // get_list: returns the list page for a given table
 int get_list(struct http_request_s *req, struct http_response_s *res, char *table)
 {
+	return 0;
+
+#if 0
 	sqlite3_stmt *stmt;
 	size_t page_siz, page_cnt;
 	char *sort_col, *sort_ord;
@@ -621,7 +577,6 @@ int get_list(struct http_request_s *req, struct http_response_s *res, char *tabl
 	if (rc != SQLITE_OK) {
 		SQLITE_ERRMSG(rc);
 		sqlite3_finalize(stmt);
-		free_kvpairs(q);
 		return -1;
 	}
 #undef THE_SQL
@@ -693,327 +648,7 @@ int get_list(struct http_request_s *req, struct http_response_s *res, char *tabl
 	free_kvpairs(q);
 
 	return 0;
-}
-
-// recipe_post: handles the POSTing of a recipe record
-int recipe_post(struct http_request_s *req, struct http_response_s *res)
-{
-	struct kvpairs form;
-	struct http_string_s body;
-	s64 rowid;
-	int rc;
-
-	body = http_request_body(req);
-
-	form = parse_url_encoded(body);
-
-	if (!recipe_validation(&form)) {
-		ERR("invalid form data!\n");
-		free_kvpairs(form);
-		return -1;
-	}
-
-	rc = recipe_insert(&form);
-	if (rc < 0) {
-		ERR("couldn't insert recipe!\n");
-		goto recipe_post_error;
-	}
-
-	rowid = rc;
-
-	rc = ingredients_insert(&form, rowid);
-	if (rc < 0) {
-		ERR("couldn't insert ingredients!\n");
-		goto recipe_post_error;
-	}
-
-	rc = steps_insert(&form, rowid);
-	if (rc < 0) {
-		ERR("couldn't insert steps!\n");
-		goto recipe_post_error;
-	}
-
-	rc = tags_insert(&form, rowid);
-	if (rc < 0) {
-		ERR("couldn't insert tags!\n");
-		goto recipe_post_error;
-	}
-
-	free_kvpairs(form);
-
-	// send a simple success page
-	send_file(req, res, "html/success.html");
-
-	return 0;
-
-recipe_post_error:
-	free_kvpairs(form);
-	return -1;
-}
-
-// recipe_put: handles the PUTting of a recipe record
-int recipe_put(struct http_request_s *req, struct http_response_s *res)
-{
-	assert(0);
-	return 0;
-}
-
-// recipe_delete: handles the DELETEting of a recipe record
-int recipe_delete(struct http_request_s *req, struct http_response_s *res)
-{
-	assert(0);
-	return 0;
-}
-
-// recipe_insert: inserts the recipe from the form into the database
-int recipe_insert(struct kvpairs *form)
-{
-	sqlite3_stmt *stmt;
-	char *sql;
-	int rc;
-
-	sql = "insert into recipe (name, prep_time, cook_time, note) values (?,?,?,?);";
-
-	rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
-	if (rc != SQLITE_OK) {
-		return -1;
-	}
-
-	sqlite3_bind_text(stmt, 1, getv(form, "name"), -1, NULL);
-	sqlite3_bind_int(stmt, 2, atoi(getv(form, "prep_time")));
-	sqlite3_bind_int(stmt, 3, atoi(getv(form, "cook_time")));
-
-	if (getv(form, "note") != NULL) {
-		sqlite3_bind_text(stmt, 4, getv(form, "note"), -1, NULL);
-	} else {
-		sqlite3_bind_null(stmt, 4);
-	}
-
-	rc = sqlite3_step(stmt);
-	if (rc != SQLITE_DONE) {
-		SQLITE_ERRMSG(rc);
-		sqlite3_finalize(stmt);
-		return -1;
-	}
-
-	sqlite3_finalize(stmt);
-
-	return sqlite3_last_insert_rowid(db);
-}
-
-// ingredients_insert: inserts all of the available ingredients
-int ingredients_insert(struct kvpairs *form, s64 rowid)
-{
-	struct kvpair *pair;
-    sqlite3_stmt *stmt;
-	char *ingredients[512];
-	size_t i, j;
-	size_t idx;
-    char *sql;
-	char *s;
-    int rc;
-
-	memset(ingredients, 0, sizeof ingredients);
-
-	for (i = 0; i < form->kvpair_len; i++) { // gather all of the ingredients
-		pair = form->kvpair + i;
-		if (regex("ingredients[.*]", pair->k)) {
-			s = strchr(pair->k, '[') + 1;
-			idx = atoi(s);
-			if (idx < 512 && !ingredients[idx]) {
-				ingredients[idx] = pair->v;
-			} else {
-				ERR("user sent out of bounds or duplicate index '%ld\n", i);
-			}
-		}
-	}
-
-    sql = "insert into ingredient (recipe_id, desc, sort) values ((select id from recipe where rowid = ?), ?, ?);";
-
-	for (i = j = 0; i < 512; i++) {
-		if (ingredients[i]) {
-            rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
-            if (rc != SQLITE_OK) {
-                SQLITE_ERRMSG(rc);
-                sqlite3_finalize(stmt);
-                return -1;
-            }
-
-            rc = sqlite3_bind_int64(stmt, 1, rowid);
-            rc = sqlite3_bind_text(stmt, 2, ingredients[i], -1, NULL);
-            rc = sqlite3_bind_int(stmt, 3, (int)j++);
-
-            rc = sqlite3_step(stmt);
-            if (rc != SQLITE_DONE) {
-                SQLITE_ERRMSG(rc);
-                sqlite3_finalize(stmt);
-                return -1;
-            }
-
-            sqlite3_finalize(stmt);
-        }
-	}
-
-	return 0;
-}
-
-// steps_insert: inserts all of the available steps, in the right order
-int steps_insert(struct kvpairs *form, s64 rowid)
-{
-	struct kvpair *pair;
-    sqlite3_stmt *stmt;
-	char *steps[512];
-	size_t i, j;
-	size_t idx;
-    char *sql;
-	char *s;
-    int rc;
-
-	memset(steps, 0, sizeof steps);
-
-	for (i = 0; i < form->kvpair_len; i++) { // gather all of the steps
-		pair = form->kvpair + i;
-		if (regex("steps[.*]", pair->k)) {
-			s = strchr(pair->k, '[') + 1;
-			idx = atoi(s);
-			if (idx < 512 && !steps[idx]) {
-				steps[idx] = pair->v;
-			} else {
-				ERR("user sent out of bounds or duplicate index '%ld\n", i);
-			}
-		}
-	}
-
-    sql = "insert into step (recipe_id, text, sort) values ((select id from recipe where rowid = ?), ?, ?);";
-
-	for (i = j = 0; i < 512; i++) {
-		if (steps[i]) {
-            rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
-            if (rc != SQLITE_OK) {
-                SQLITE_ERRMSG(rc);
-                sqlite3_finalize(stmt);
-                return -1;
-            }
-
-            rc = sqlite3_bind_int64(stmt, 1, rowid);
-            rc = sqlite3_bind_text(stmt, 2, steps[i], -1, NULL);
-            rc = sqlite3_bind_int(stmt, 3, (int)j++);
-
-            rc = sqlite3_step(stmt);
-            if (rc != SQLITE_DONE) {
-                SQLITE_ERRMSG(rc);
-                sqlite3_finalize(stmt);
-                return -1;
-            }
-
-            sqlite3_finalize(stmt);
-        }
-	}
-
-	return 0;
-}
-
-// tags_insert: inserts all of the tags
-int tags_insert(struct kvpairs *form, s64 rowid)
-{
-	struct kvpair *pair;
-    sqlite3_stmt *stmt;
-	char *tags[512];
-	size_t i;
-	size_t idx;
-    char *sql;
-	char *s;
-    int rc;
-
-	memset(tags, 0, sizeof tags);
-
-	for (i = 0; i < form->kvpair_len; i++) { // gather all of the tags
-		pair = form->kvpair + i;
-		if (regex("tags[.*]", pair->k)) {
-			s = strchr(pair->k, '[') + 1;
-			idx = atoi(s);
-			if (idx < 512 && !tags[idx]) {
-				tags[idx] = pair->v;
-			} else {
-				ERR("user sent out of bounds or duplicate index '%ld\n", i);
-			}
-		}
-	}
-
-    sql = "insert into tag (recipe_id, text) values ((select id from recipe where rowid = ?), ?);";
-
-	for (i = 0; i < 512; i++) {
-		if (tags[i]) {
-            rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
-            if (rc != SQLITE_OK) {
-                SQLITE_ERRMSG(rc);
-                sqlite3_finalize(stmt);
-                return -1;
-            }
-
-            rc = sqlite3_bind_int64(stmt, 1, rowid);
-            rc = sqlite3_bind_text(stmt, 2, tags[i], -1, NULL);
-
-            rc = sqlite3_step(stmt);
-            if (rc != SQLITE_DONE) {
-                SQLITE_ERRMSG(rc);
-                sqlite3_finalize(stmt);
-                return -1;
-            }
-
-            sqlite3_finalize(stmt);
-        }
-	}
-
-	return 0;
-}
-
-// recipe_validation: returns true if the form fits a recipe
-int recipe_validation(struct kvpairs *form)
-{
-	char *string_values[] = {
-		"name",
-		"ingredients[.*]",
-		"steps[.*]",
-		"tags[.*]",
-		"note"
-	};
-
-	char *int_values[] = {
-		"prep_time",
-		"cook_time"
-	};
-
-	size_t i, j;
-	int found;
-
-	for (i = 0; i < form->kvpair_len; i++) {
-		struct kvpair *pair = form->kvpair + i;
-
-		found = 0;
-
-		// check if this is a string value
-		for (j = 0; !found && j < sizeof(string_values) / sizeof(char *); j++) {
-			if (regex(string_values[j], pair->k))
-				found = 1;
-		}
-
-		// check if this is an integer value
-		for (j = 0; !found && j < sizeof(int_values) / sizeof(char *); j++) {
-			if (regex(int_values[j], pair->k))
-				found = 1;
-		}
-
-#if 0
-		if (!found) // we found a key in the form that ISN'T a recipe-ish key
-			return 0;
-#else
-		if (!found)
-			printf("found '%s' in form\n", pair->k);
 #endif
-	}
-
-	return 1;
 }
 
 // user_post: handles the POSTing of a new user record
@@ -1200,28 +835,17 @@ int is_uuid(char *id)
 	return id[14] == '4';
 }
 
-// getv: gets the value from a kvpair(s) given the key
-char *getv(struct kvpairs *pairs, char *k)
-{
-	size_t i;
-
-	for (i = 0; i < pairs->kvpair_len; i++) {
-		if (streq(pairs->kvpair[i].k, k))
-			return pairs->kvpair[i].v;
-	}
-
-	return NULL;
-}
-
 // parse_url_encoded: parses the query out from the http_string_s
-struct kvpairs parse_url_encoded(struct http_string_s parseme)
+struct object *parse_url_encoded(struct http_string_s parseme)
 {
-	struct kvpairs pairs;
+	struct object *root, *curr;
+	char pbuf[BUFSMALL];
 	char *content;
 	char *ss, *s;
+	char *k, *v;
 	int i;
 
-	memset(&pairs, 0, sizeof pairs);
+	root = NULL;
 
 	content = strndup(parseme.buf, parseme.len);
 
@@ -1233,19 +857,26 @@ struct kvpairs parse_url_encoded(struct http_string_s parseme)
 	}
 
 	for (i = 0, s = strtok(ss, "=&"); s; i++, s = strtok(NULL, "=&")) {
-		C_RESIZE(&pairs.kvpair);
-
 		if (i % 2 == 0) {
-			pairs.kvpair[pairs.kvpair_len].k = decode_string(s);
+			k = decode_string(s);
 		} else {
-			pairs.kvpair[pairs.kvpair_len].v = decode_string(s);
-			pairs.kvpair_len++;
+			v = decode_string(s);
+
+			snprintf(pbuf, sizeof pbuf, ".%s", k);
+
+			curr = object_deref_and_create(&root, pbuf);
+
+			object_ss(curr, v);
 		}
+	}
+
+	if (i % 2 == 1) {
+		free(k);
 	}
 
 	free(content);
 
-	return pairs;
+	return root;
 }
 
 // decode_string: decodes s, of length n into a normal string
@@ -1321,37 +952,6 @@ int xctoi(char v)
 	}
 }
 
-int _xctoi(char v) {
-	v = tolower(v);
-	if ( v >= '0' || v <= '9' ) return v - '0';
-	if ( v >= 'a' || v <= 'f' ) return v - 'a' + 10;
-	return -1;
-}
-
-// free_kvpairs: frees a kvpairs array
-void free_kvpairs(struct kvpairs pairs)
-{
-	size_t i;
-
-	for (i = 0; i < pairs.kvpair_len; i++) {
-		free(pairs.kvpair[i].k);
-		free(pairs.kvpair[i].v);
-	}
-
-	free(pairs.kvpair);
-}
-
-// kvpair: constructor for a kvpair
-struct kvpair kvpair(char *k, char *v)
-{
-	struct kvpair pair;
-
-	pair.k = k;
-	pair.v = v;
-
-	return pair;
-}
-
 // user_fromjson: creates a user from a json string input
 struct user *user_fromjson(char *s, size_t len)
 {
@@ -1369,10 +969,10 @@ struct user *user_fromjson(char *s, size_t len)
         return NULL;
     }
 
-    user->username = object_s(object, ".username");
-    user->password = object_s(object, ".password");
-    user->verify = object_s(object, ".verify");
-    user->email = object_s(object, ".email");
+    user->username = object_gs(object, ".username");
+    user->password = object_gs(object, ".password");
+    user->verify = object_gs(object, ".verify");
+    user->email = object_gs(object, ".email");
 
     object_free(object);
 
@@ -1391,68 +991,113 @@ void user_free(struct user *user)
     }
 }
 
-// object_t: locates the object with 'path', returns the type
-int object_t(struct object *object, char *path)
+// object_ss: sets the type on 'object' to string, and sets v_string to 's'
+void object_ss(struct object *object, char *s)
+{
+	if (object == NULL)
+		return;
+	object->type = OBJECT_STRING;
+	object->v_string = s;
+}
+
+// object_ss: sets the type on 'object' to number, and sets v_num to 'n'
+void object_sn(struct object *object, f64 n)
+{
+	if (object == NULL)
+		return;
+	object->type = OBJECT_NUMBER;
+	object->v_num = n;
+}
+
+// object_sb: sets the type on 'object' to bool and sets v_bool to 'b'
+void object_sb(struct object *object, int b)
+{
+	if (object == NULL)
+		return;
+	object->type = OBJECT_BOOL;
+	object->v_bool = b;
+}
+
+// object_so: sets the type on 'object' to object and sets child to 'o'
+void object_so(struct object *object, struct object *o)
+{
+	if (object == NULL)
+		return;
+	object->type = OBJECT_OBJECT;
+	object->child = o;
+}
+
+// object_sa: sets the type on 'object' to array and sets child to 'a'
+void object_sa(struct object *object, struct object *a)
+{
+	if (object == NULL)
+		return;
+	object->type = OBJECT_ARRAY;
+	object->child = a;
+}
+
+// object_gt: locates the object with 'path', returns the type
+int object_gt(struct object *object, char *path)
 {
     struct object *z;
 
-    z = object_from_path(object, path);
+    z = object_deref(object, path);
 
     return z == NULL ? OBJECT_UNDEFINED : z->type;
 }
 
-// object_s: locates the object with 'path', returns the string
-char *object_s(struct object *object, char *path)
+// object_gs: locates the object with 'path', returns the string
+char *object_gs(struct object *object, char *path)
 {
     struct object *z;
 
-    z = object_from_path(object, path);
+    z = object_deref(object, path);
 
     return z == NULL ? NULL : strdup(z->v_string);
 }
 
-// object_n: locates the object with 'path', returns the number
-double object_n(struct object *object, char *path)
+// object_gn: locates the object with 'path', returns the number
+double object_gn(struct object *object, char *path)
 {
     struct object *z;
 
-    z = object_from_path(object, path);
+    z = object_deref(object, path);
 
     return z == NULL ? 0.0 : z->v_num;
 }
 
-// object_b: locates the object with 'path', returns the boolean
-int object_b(struct object *object, char *path)
+// object_gb: locates the object with 'path', returns the boolean
+int object_gb(struct object *object, char *path)
 {
     struct object *z;
 
-    z = object_from_path(object, path);
+    z = object_deref(object, path);
 
     return z == NULL ? -1 : z->v_bool;
 }
 
-// object_o: finds the object with 'path', returns that object (NULL if it isn't an object)
-struct object *object_o(struct object *object, char *path)
+// object_go: finds the object with 'path', returns that object (NULL if it isn't an object)
+struct object *object_go(struct object *object, char *path)
 {
     struct object *z;
 
-    z = object_from_path(object, path);
+    z = object_deref(object, path);
 
     return z != NULL && z->type == OBJECT_OBJECT ? z : NULL;
 }
 
-// object_a: finds the object with 'path', returns that object (NULL if it's an array)
-struct object *object_a(struct object *object, char *path)
+// object_ga: finds the object with 'path', returns that object (NULL if it's an array)
+struct object *object_ga(struct object *object, char *path)
 {
     struct object *z;
 
-    z = object_from_path(object, path);
+    z = object_deref(object, path);
 
     return z != NULL && z->type == OBJECT_ARRAY ? z : NULL;
 }
 
-// object_from_path: locates the object with 'path'
-struct object *object_from_path(struct object *root, char *path)
+// object_deref: locates the object with 'path'
+struct object *object_deref(struct object *root, char *path)
 {
     // NOTE (Brian) this function basically attempts to dereference strings until we get to an
     // object / array dereference, then we return an attempt in the child to dereference.
@@ -1467,7 +1112,7 @@ struct object *object_from_path(struct object *root, char *path)
     k = path;
 
     if (k[0] == '.' || k[0] == '[') {
-        return object_from_path(root->child, path + 1);
+        return object_deref(root->child, path + 1);
     } else {
         for (e = k; *e && *e != '.' && *e != '[' && *e != ']'; e++)
             ;
@@ -1482,6 +1127,69 @@ struct object *object_from_path(struct object *root, char *path)
 
         return NULL;
     }
+}
+
+// object_deref_and_create: locates the object with 'path'
+struct object *object_deref_and_create(struct object **root, char *path)
+{
+    struct object *curr, *prev;
+    char *k, *e;
+    size_t len;
+
+	if (path == NULL) {
+		return NULL;
+	}
+
+	if (*root == NULL) {
+		*root = calloc(1, sizeof(*root));
+	}
+
+	if (strlen(path) == 0) {
+		return *root;
+	}
+
+    k = path;
+
+	if (k[0] == '.') {
+		(*root)->type = OBJECT_OBJECT;
+
+		curr = object_deref_and_create(&(*root)->child, path + 1);
+
+		(*root)->child = curr;
+		return curr;
+	} else if (k[0] == '[') {
+		(*root)->type = OBJECT_ARRAY;
+
+		curr = object_deref_and_create(&(*root)->child, path + 1);
+
+		(*root)->child = curr;
+		return curr;
+	} else {
+		if (k[0] == ']')
+			k++;
+
+        for (e = k; *e && *e != '.' && *e != '[' && *e != ']'; e++)
+            ;
+
+        len = e - k;
+
+		curr = *root;
+		prev = NULL;
+
+		while (prev->next && curr) {
+			if (strncmp(k, curr->k, len) == 0) {
+				return curr;
+			}
+
+			prev = curr;
+			curr = curr->next;
+		}
+
+		curr = calloc(1, sizeof(*curr));
+		prev->next = curr;
+
+		return curr;
+	}
 }
 
 // object_from_json: creates an object from a list of json tokens
@@ -1558,7 +1266,7 @@ struct object *object_from_tokens(char *s, jsmntok_t *tokens, size_t len)
                 curr->type = OBJECT_BOOL;
                 curr->v_bool = vstr[0] == 't';
             } else if (isdigit(vstr[0]) || vstr[0] == '-') { // check if value is number
-                curr->type = OBJECT_NUM;
+                curr->type = OBJECT_NUMBER;
                 curr->v_num = atof(s + val.start);
             } else if (vstr[0] == 'n') { // if it's NULL
                 curr->type = OBJECT_NULL;
