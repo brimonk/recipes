@@ -1539,9 +1539,6 @@ struct object *object_from_tokens(char *s, jsmntok_t *tokens, size_t len)
         // It's the case that when we get into this block, 'len' has the number of tokens left to
         // parse. Given that while in this block we parse two tokens at a time (key and value), we
         // simply continue until we have < 1 tokens, then we return
-        //
-        // Also, the +1/-1 in the string gathering parts are to skip over double quote chars in the
-        // JSON.
 
         curr = object;
 
