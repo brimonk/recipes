@@ -831,7 +831,7 @@ int is_uuid(char *id)
 		}
 	}
 
-	// index 13 should always be '4'
+	// char 13 should always be '4'
 	return id[14] == '4';
 }
 
