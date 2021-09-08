@@ -58,7 +58,7 @@
 ** If the X input string has too few or too many digits or contains
 ** stray characters other than {, }, or -, then NULL is returned.
 */
-#include "sqlite3ext.h"
+#include "../sqlite3ext.h"
 SQLITE_EXTENSION_INIT1
 #include <assert.h>
 #include <string.h>

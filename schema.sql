@@ -22,7 +22,7 @@ create unique index if not exists idx_user_email on user(email);
 create table if not exists user_session
 (
       user_id      text not null
-    , session_id   blob not null
+    , session_id   text not null
     , expires_ts   text default (strftime('%Y-%m-%dT%H:%M:%S', 'now', '+7 days'))
 
     , foreign key (user_id) references user(id)

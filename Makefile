@@ -20,10 +20,10 @@ all: $(TARGET) ext_uuid.so html/ui.js
 
 -include $(DEP)
 
-ext_uuid.so: src/sqlite3.o src/uuid.o
+ext_uuid.so: src/sqlite3.o src/lib/uuid.c
 	$(CC) $(CFLAGS) -fPIC -shared -o $@ $^ $(LINKER)
 
-$(TARGET): src/sqlite3.o src/recipe.o
+$(TARGET): $(OBJ)
 	$(CC) $(CFLAGS) -o $(TARGET) $^ $(LINKER)
 
 html/ui.js: $(JS)
