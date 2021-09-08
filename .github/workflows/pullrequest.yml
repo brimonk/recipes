@@ -12,9 +12,9 @@ jobs:
 
         steps:
             - name: install dependencies
-            - uses: actions/checkout@v2
-            - run: sudo apt-get install libsodium-dev libmagic-dev
+              uses: actions/checkout@v2
+              run: sudo apt-get install libsodium-dev libmagic-dev
             - name: build
-            - uses: actions/checkout@v2
-            - run: make
+              uses: actions/checkout@v2
+              run: make
 
