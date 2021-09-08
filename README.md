@@ -25,6 +25,17 @@ on like, a computer from 2002 with how simple they _should_ be.
 
 Honestly, just watch some of Handmade Hero, and you'll probably get why.
 
+## Updating
+
+### Update Mithril
+
+Visit [the actual website](https://mithril.js.org/) to ensure this is the real link, but something
+like the following should update mithril.js, in-repo.
+
+```sh
+curl "https://unpkg.com/mithril/mithril.js" > html/mithril.js
+```
+
 ## WIP
 
 ### In Progress
