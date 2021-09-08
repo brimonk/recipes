@@ -8,6 +8,11 @@ session cookie for all operations where you might create new content.  It is imp
 of this cookie; however, you can still view recipes to your heart's content without using cookies.
 `;
 
+// VError: a validation error constructor
+function VError(prop, msg) {
+    return { prop: prop, msg: msg };
+}
+
 // MenuComponent
 function MenuComponent(initialVnode) {
     return {
@@ -127,15 +132,23 @@ function ErrorComponent(initialVnode) {
     };
 }
 
-// Auth Object
-class Auth {
-    constructor() {
+// User Object
+class User {
+    constructor(context = "data") {
         this.username = "";
         this.password = "";
         this.email = "";
         this.verify = "";
 
-        this.allRequired = false;
+        this.context = context;
+
+        const contexts = [
+            "newuser", "login", "data"
+        ];
+
+        if (!contexts.includes(this.context)) {
+            throw new Error(`'${this.context}' is an invalid user context`);
+        }
     }
 
     setUsername(value) {
@@ -154,23 +167,115 @@ class Auth {
         this.verify = value;
     }
 
-    setAllRequired(value) {
-        this.allRequired = value;
+    setContext(value) {
+        this.context = value;
     }
 
-    isValid() {
+    // validate: validates the user object for login or create purposes
+    validate() {
         // TODO (Brian) add in validation logic
-        return true;
+
+        const errors = [];
+
+        if (this.context === "data") {
+            return errors;
+        }
+
+        if (this.context === "login" || this.context === "newuser") {
+            // the username must be < 40 chars
+            if (this.username.length === 0) {
+                errors.push(new VError("username", "You must provide a value!"));
+            } else if (this.username.length > 50) {
+                errors.push(new VError("username", "Must be less than 50 characters!"));
+            } else if (0 <= this.username.indexOf(" ")) {
+                errors.push(new VError("username", "Cannot contain a space!"));
+            }
+        }
+
+        if (this.context === "newuser") {
+            // email must be real
+            if (this.email.length === 0) {
+                errors.push(new VError("email", "You must provide a value!"));
+            } else if (!email_re.test(this.email)) {
+                errors.push(new VError("email", "You must provide a valid email!"));
+            }
+        }
+
+        if (this.context === "login") {
+            // pass && 6 < pass.len
+            if (this.password.length === 0) {
+                errors.push(new VError("password", "You must provide a value!"));
+            } else if (this.password.length < 6) {
+                errors.push(new VError("password", "Your password must be at least 6 characters!"));
+            }
+        }
+
+        if (this.context === "login" || this.context === "newuser") {
+            // pass && 6 < pass.len
+            if (this.verify.length === 0) {
+                errors.push(new VError("verify", "You must provide a value!"));
+            } else if (this.password !== this.verify) {
+                errors.push(new VError("verify", "The passwords must match!"));
+            }
+        }
+
+        return errors;
     }
 
+    // create: calls the backend to create a new user
+    create() {
+        const errors = this.validate();
+
+        if (0 < errors.length) {
+            return null;
+        }
+
+        if (this.context !== "newuser") {
+            return null;
+        }
+
+        const data = {
+            username: this.username,
+            password: this.password,
+            verify: this.verify,
+            email: this.email,
+        };
+
+        return m.request({
+            method: "POST",
+            url: "/api/v1/user/create",
+            body: data,
+        });
+    }
+
+    // login: logs the user described in this object in
     login() {
-        // TODO (Brian) add login logic
+        const errors = this.validate();
+
+        if (0 < errors.length) {
+            return null;
+        }
+
+        if (this.context !== "login") {
+            return null;
+        }
+
+        const data = {
+            username: this.username,
+            password: this.password,
+        };
+
+        return m.request({
+            method: "POST",
+            url: "/api/v1/user/create",
+            body: data,
+        });
     }
 }
 
 // LoginComponent
 function LoginComponent(inivialVnode) {
-    const auth = new Auth();
+    const user = new User();
 
     return {
         view: function(vnode) {
@@ -189,21 +294,23 @@ function LoginComponent(inivialVnode) {
                         m("div", [
                             m("label", "Username"),
                             m("input[type=text]", {
-                                oninput: function (e) { auth.setUsername(e.target.value); },
-                                value: auth.username,
+                                oninput: function (e) { user.setUsername(e.target.value); },
+                                value: user.username,
                             }),
                         ]),
 
                         m("div", [
                             m("label", "Password"),
-                            m("input[type=password,autocomplete=off]", {
-                                oninput: function (e) { auth.setPassword(e.target.value); },
-                                value: auth.password,
+                            m("input[type=password]", {
+                                oninput: function (e) { user.setPassword(e.target.value); },
+                                value: user.password,
                             }),
                         ]),
 
                         m("div", [
-                            m("button.button[type=submit]", "Login"),
+                            m("button.button[type=button]", {
+                                onclick: function() { user.login(); }
+                            }, "Login"),
                             m("button.button[type=button]", {
                                 onclick: function() { m.route.set("/home"); }
                             }, "Cancel"),
@@ -220,7 +327,7 @@ function LoginComponent(inivialVnode) {
 
 // New User Component
 function NewUserComponent(initialVnode) {
-    const auth = new Auth();
+    const user = new User("newuser");
 
     return {
         view: function(vnode) {
@@ -238,37 +345,39 @@ function NewUserComponent(initialVnode) {
                         m("div", [
                             m("label", "Username"),
                             m("input[type=text]", {
-                                oninput: function (e) { auth.setUsername(e.target.value); },
-                                value: auth.username,
+                                oninput: function (e) { user.setUsername(e.target.value); },
+                                value: user.username,
                             }),
                         ]),
 
                         m("div", [
                             m("label", "Email"),
                             m("input[type=email]", {
-                                oninput: function (e) { auth.setEmail(e.target.value); },
-                                value: auth.email,
+                                oninput: function (e) { user.setEmail(e.target.value); },
+                                value: user.email,
                             }),
                         ]),
 
                         m("div", [
                             m("label", "Password"),
-                            m("input[type=password,autocomplete=off]", {
-                                oninput: function (e) { auth.setPassword(e.target.value); },
-                                value: auth.password,
+                            m("input[type=password]", {
+                                oninput: function (e) { user.setPassword(e.target.value); },
+                                value: user.password,
                             }),
                         ]),
 
                         m("div", [
                             m("label", "Verify Password"),
                             m("input[type=password]", {
-                                oninput: function (e) { auth.setVerify(e.target.value); },
-                                value: auth.verify,
+                                oninput: function (e) { user.setVerify(e.target.value); },
+                                value: user.verify,
                             }),
                         ]),
 
                         m("div", [
-                            m("button.button[type=submit]", "Save"),
+                            m("button.button[type=submit]", {
+                                onclick: function() { user.create(); }
+                            }, "Save"),
                             m("button.button[type=button]", {
                                 onclick: function() { m.route.set("/home"); },
                             }, "Cancel"),
