@@ -1,26 +1,13 @@
 // Brian Chrzanowski
 // 2021-06-08 20:04:01
-//
-// fitness tracking program. read the schema to see the things we care about
-//
-// TODO (Brian)
-// 1. form (style)
-// 2. unencode the percent encoded things
-// 3. create functions that'll verify sent across data types
-// 4. deal with 
-//
-// We have to do something about parsing numbers and whatever else. We sure are just accepting
-// whateve the user passes to us right into functions like 'atoi', and that probably isn't very
-// good.
-//
-// QUESTIONABLE
-// - generic function that inserts to a table given a form / table name
 
 #define COMMON_IMPLEMENTATION
 #include "common.h"
 
 #define HTTPSERVER_IMPL
 #include "httpserver.h"
+
+#include "jsmn.h"
 
 #include "sqlite3.h"
 
@@ -39,14 +26,100 @@ struct kvpairs {
 	size_t kvpair_len, kvpair_cap;
 };
 
+enum {
+    OBJECT_UNDEFINED,
+    OBJECT_NULL,
+    OBJECT_BOOL,
+    OBJECT_NUM,
+    OBJECT_STRING,
+    OBJECT_OBJECT,
+    OBJECT_ARRAY,
+    OBJECT_TOTAL
+};
+
+struct object {
+    int type;
+    char *k;
+    union {
+        char *v_string;
+        f64 v_num;
+        int v_bool;
+    };
+    struct object *next;
+    struct object *child;
+    struct object *parent;
+};
+
 static magic_t MAGIC_COOKIE;
 
 static sqlite3 *db;
+
+// APPLICATION DATA STRUCTURES HERE
+struct user {
+    char *username;
+    char *password;
+    char *verify;
+    char *email;
+};
+
+struct search {
+    char *query;
+    char *sort_column;
+    char *sort_dir;
+    size_t page;
+    size_t size;
+};
+
+struct recipe {
+    char *name;
+
+    int cook_time;
+    int prep_time;
+    int servings;
+
+    char *notes;
+
+    char **ingredients;
+    char **steps;
+    char **tags;
+};
+
+// APPLICATION FUNCTIONS HERE
 
 // init: initializes the program
 void init(char *db_file_name, char *sql_file_name);
 // cleanup: cleans up resources open so we can elegantly close the program
 void cleanup(void);
+
+// object_from_json: creates an object from a list of json tokens
+struct object *object_from_json(char *s, size_t len);
+
+// object_from_tokens: recursive function building up the 'object' tree
+struct object *object_from_tokens(char *s, jsmntok_t *tokens, size_t len);
+
+// object_free: frees the object
+void object_free(struct object *object);
+
+// object_t: locates the object with 'path', returns the type
+int object_t(struct object *object, char *path);
+
+// object_s: locates the object with 'path', returns the string
+char *object_s(struct object *object, char *path);
+
+// object_n: locates the object with 'path', returns the number
+double object_n(struct object *object, char *path);
+
+// object_b: locates the object with 'path', returns the boolean
+int object_b(struct object *object, char *path);
+
+// object_o: finds the object with 'path', returns that object (NULL if it isn't an object)
+struct object *object_o(struct object *object, char *path);
+
+// object_a: finds the object with 'path', returns that object (NULL if it's an array)
+struct object *object_a(struct object *object, char *path);
+
+// object_from_path: locates the object with 'path'
+struct object *object_from_path(struct object *root, char *path);
 
 // create_tables: execs create * statements on the database
 int create_tables(sqlite3 *db, char *fname);
@@ -221,38 +294,18 @@ void request_handler(struct http_request_s *req)
 
 	res = http_response_init();
 
-	if (0) { // send recipe form
-
-	// recipe endpoints
-    } else if (rcheck(req, "/recipe", "GET")) { // send recipe form
-		rc = send_file(req, res, "html/recipe.html");
-		CHKERR(503);
-
-	} else if (rcheck(req, "/recipe.js", "GET")) {
-		rc = send_file(req, res, "html/recipe.js");
-        CHKERR(503);
-
-	} else if (rcheck(req, "/recipe", "POST")) {
-		rc = recipe_post(req, res);
-		CHKERR(503);
-
-	} else if (rcheck(req, "/recipe", "PUT")) {
-		rc = recipe_put(req, res);
-		CHKERR(503);
-
-	} else if (rcheck(req, "/recipe", "DELETE")) {
-		rc = recipe_delete(req, res);
-		CHKERR(503);
-
-	} else if (rcheck(req, "/list", "GET")) {
-		rc = get_list(req, res, "v_list_recipe");
-		CHKERR(503);
-
-	} else if (rcheck(req, "/recipe.js", "GET")) {
-		rc = send_file(req, res, "html/recipe.js");
-		CHKERR(503);
+	if (0) {
 
     // user endpoints
+    } else if (rcheck(req, "/api/v1/user/create", "POST")) {
+        rc = user_post(req, res);
+        CHKERR(503);
+
+    } else if (rcheck(req, "/api/v1/user/login", "POST")) {
+        rc = -1;
+        CHKERR(503); // TODO (Brian) fix login too
+
+        /*
 	} else if (rcheck(req, "/newuser", "GET")) {
 		rc = send_file(req, res, "html/newuser.html");
         CHKERR(503);
@@ -280,6 +333,7 @@ void request_handler(struct http_request_s *req)
     } else if (rcheck(req, "/logout", "GET")) {
         rc = user_logout(req, res);
         CHKERR(503);
+        */
 
 	// static files, unrelated to main CRUD operations
 	} else if (rcheck(req, "/style.css", "GET")) {
@@ -966,10 +1020,26 @@ int user_post(struct http_request_s *req, struct http_response_s *res)
 {
     struct kvpairs form;
     struct http_string_s body;
+    jsmn_parser parser;
+    jsmntok_t tokens[128];
     int rc;
+
+    jsmn_init(&parser);
 
     body = http_request_body(req);
 
+    rc = jsmn_parse(&parser, body.buf, body.len, tokens, ARRSIZE(tokens));
+
+#if 1
+    int i;
+
+    for (i = 0; i < rc; i++) {
+        printf("type : %d\n", tokens[i].type);
+        printf("%d : %.*s\n", i, tokens[i].end - tokens[i].start, body.buf + tokens[i].start);
+    }
+
+    return 0;
+#else
     form = parse_url_encoded(body);
 
     if (!user_validation(&form)) {
@@ -991,6 +1061,7 @@ int user_post(struct http_request_s *req, struct http_response_s *res)
 user_post_error:
     free_kvpairs(form);
     return -1;
+#endif
 }
 
 // user_insert: handles the inserting of a user
@@ -1307,6 +1378,223 @@ struct kvpair kvpair(char *k, char *v)
 	pair.v = v;
 
 	return pair;
+}
+
+// user_fromjson: creates a user from a json string input
+struct user *user_fromjson(char *s, size_t len)
+{
+    struct user *user;
+    struct object *object;
+
+    object = object_from_json(s, len);
+    if (object == NULL) {
+        return NULL;
+    }
+
+    user = calloc(1, sizeof(*user));
+    if (user == NULL) {
+        object_free(object);
+        return NULL;
+    }
+
+    user->username = object_s(object, ".username");
+    user->password = object_s(object, ".password");
+    user->verify = object_s(object, ".verify");
+    user->email = object_s(object, ".email");
+
+    object_free(object);
+
+    return user;
+}
+
+// object_t: locates the object with 'path', returns the type
+int object_t(struct object *object, char *path)
+{
+    struct object *z;
+
+    z = object_from_path(object, path);
+
+    return z == NULL ? OBJECT_UNDEFINED : z->type;
+}
+
+// object_s: locates the object with 'path', returns the string
+char *object_s(struct object *object, char *path)
+{
+    struct object *z;
+
+    z = object_from_path(object, path);
+
+    return z == NULL ? NULL : strdup(z->v_string);
+}
+
+// object_n: locates the object with 'path', returns the number
+double object_n(struct object *object, char *path)
+{
+    struct object *z;
+
+    z = object_from_path(object, path);
+
+    return z == NULL ? 0.0 : z->v_num;
+}
+
+// object_b: locates the object with 'path', returns the boolean
+int object_b(struct object *object, char *path)
+{
+    struct object *z;
+
+    z = object_from_path(object, path);
+
+    return z == NULL ? -1 : z->v_bool;
+}
+
+// object_o: finds the object with 'path', returns that object (NULL if it isn't an object)
+struct object *object_o(struct object *object, char *path)
+{
+    struct object *z;
+
+    z = object_from_path(object, path);
+
+    return z != NULL && z->type == OBJECT_OBJECT ? z : NULL;
+}
+
+// object_a: finds the object with 'path', returns that object (NULL if it's an array)
+struct object *object_a(struct object *object, char *path)
+{
+    struct object *z;
+
+    z = object_from_path(object, path);
+
+    return z != NULL && z->type == OBJECT_ARRAY ? z : NULL;
+}
+
+// object_from_path: locates the object with 'path'
+struct object *object_from_path(struct object *root, char *path)
+{
+    // NOTE (Brian) this function basically attempts to dereference strings until we get to an
+    // object / array dereference, then we return an attempt in the child to dereference.
+
+    struct object *curr;
+    char *k, *e;
+    size_t len;
+
+    if (root == NULL || path == NULL)
+        return NULL;
+
+    k = path;
+
+    if (k[0] == '.' || k[0] == '[') {
+        return object_from_path(root->child, path + 1);
+    } else {
+        for (e = k; *e && *e != '.' && *e != '[' && *e != ']'; e++)
+            ;
+
+        len = e - k;
+
+        for (curr = root; curr; curr = curr->next) {
+            if (strncmp(k, curr->k, len) == 0) {
+                return curr;
+            }
+        }
+
+        return NULL;
+    }
+}
+
+// object_from_json: creates an object from a list of json tokens
+struct object *object_from_json(char *s, size_t len)
+{
+    jsmn_parser parser;
+    jsmntok_t tokens[1024];
+    int rc;
+
+    jsmn_init(&parser);
+
+    rc = jsmn_parse(&parser, s, len, tokens, ARRSIZE(tokens));
+
+    if (rc < 0) {
+        return NULL;
+    }
+
+    return object_from_tokens(s, tokens, rc);
+}
+
+// object_from_tokens: recursive function building up the 'object' tree
+struct object *object_from_tokens(char *s, jsmntok_t *tokens, size_t len)
+{
+    struct object *object;
+    char *curr;
+    size_t keylen;
+    size_t vallen;
+
+    jsmntok_t key, val;
+
+    if (len <= 0) {
+        return NULL;
+    }
+
+    // do things based on what the key is
+    if (tokens[0].type == JSMN_OBJECT) {
+        object = calloc(1, sizeof(*object));
+
+        object->type = OBJECT_OBJECT;
+
+        object->child = object_from_tokens(s, tokens + 1, tokens[0].size);
+        object->child->parent = object;
+    } else if (tokens[0].type == JSMN_ARRAY) {
+        object = calloc(1, sizeof(*object));
+
+        object->type = OBJECT_ARRAY;
+
+        object->child = object_from_tokens(s, tokens + 1, tokens[0].size);
+        object->child->parent = object;
+    } else {
+
+        // NOTE (Brian): here's the part where we parse all of the k/v pairs of the JSON object.
+
+        key = tokens[0];
+        val = tokens[1];
+
+        keylen = key.end - key.start;
+        vallen = val.end - val.start;
+
+        object = calloc(1, sizeof(*object));
+
+        curr = s + val.start;
+
+        object->k = strndup(s + key.start, keylen);
+
+        if (val.type == JSMN_STRING) {
+            object->type = OBJECT_STRING;
+            object->v_string = strndup(s + val.start, val.end - val.start);
+        } else if (curr[0] == 't' || curr[0] == 'f') { // check if value is boolean
+            object->type = OBJECT_BOOL;
+            object->v_bool = curr[0] == 't';
+        } else if (isdigit(curr[0]) || curr[0] == '-') { // check if value is number
+            object->type = OBJECT_NUM;
+            object->v_num = atof(s + val.start);
+        } else if (curr[0] == 'n') {
+            object->type = OBJECT_NULL;
+        }
+    }
+
+    return object;
+}
+
+// object_free: frees the object
+void object_free(struct object *object)
+{
+    if (object) {
+        if (object->child)
+            object_free(object->child);
+
+        if (object->next)
+            object_free(object->next);
+
+        free(object->k);
+
+        if (object->type == OBJECT_STRING)
+            free(object->v_string);
+    }
 }
 
 // init: initializes the program
