@@ -1,26 +1,13 @@
 // Brian Chrzanowski
 // 2021-06-08 20:04:01
-//
-// fitness tracking program. read the schema to see the things we care about
-//
-// TODO (Brian)
-// 1. form (style)
-// 2. unencode the percent encoded things
-// 3. create functions that'll verify sent across data types
-// 4. deal with 
-//
-// We have to do something about parsing numbers and whatever else. We sure are just accepting
-// whateve the user passes to us right into functions like 'atoi', and that probably isn't very
-// good.
-//
-// QUESTIONABLE
-// - generic function that inserts to a table given a form / table name
 
 #define COMMON_IMPLEMENTATION
 #include "common.h"
 
 #define HTTPSERVER_IMPL
 #include "httpserver.h"
+
+#include "jsmn.h"
 
 #include "sqlite3.h"
 
@@ -39,14 +26,106 @@ struct kvpairs {
 	size_t kvpair_len, kvpair_cap;
 };
 
+enum {
+    OBJECT_UNDEFINED,
+    OBJECT_NULL,
+    OBJECT_BOOL,
+    OBJECT_NUM,
+    OBJECT_STRING,
+    OBJECT_OBJECT,
+    OBJECT_ARRAY,
+    OBJECT_TOTAL
+};
+
+struct object {
+    int type;
+    char *k;
+    union {
+        char *v_string;
+        f64 v_num;
+        int v_bool;
+    };
+    struct object *next;
+    struct object *child;
+    struct object *parent;
+};
+
 static magic_t MAGIC_COOKIE;
 
 static sqlite3 *db;
+
+// APPLICATION DATA STRUCTURES HERE
+struct user {
+    char *username;
+    char *password;
+    char *verify;
+    char *email;
+};
+
+struct search {
+    char *query;
+    char *sort_column;
+    char *sort_dir;
+    size_t page;
+    size_t size;
+};
+
+struct recipe {
+    char *name;
+
+    int cook_time;
+    int prep_time;
+    int servings;
+
+    char *notes;
+
+    char **ingredients;
+    char **steps;
+    char **tags;
+};
+
+// APPLICATION FUNCTIONS HERE
 
 // init: initializes the program
 void init(char *db_file_name, char *sql_file_name);
 // cleanup: cleans up resources open so we can elegantly close the program
 void cleanup(void);
+
+// object_from_json: creates an object from a list of json tokens
+struct object *object_from_json(char *s, size_t len);
+
+// object_from_tokens: recursive function building up the 'object' tree
+struct object *object_from_tokens(char *s, jsmntok_t *tokens, size_t len);
+
+// object_free: frees the object
+void object_free(struct object *object);
+
+// object_t: locates the object with 'path', returns the type
+int object_t(struct object *object, char *path);
+
+// object_s: locates the object with 'path', returns the string
+char *object_s(struct object *object, char *path);
+
+// object_n: locates the object with 'path', returns the number
+double object_n(struct object *object, char *path);
+
+// object_b: locates the object with 'path', returns the boolean
+int object_b(struct object *object, char *path);
+
+// object_o: finds the object with 'path', returns that object (NULL if it isn't an object)
+struct object *object_o(struct object *object, char *path);
+
+// object_a: finds the object with 'path', returns that object (NULL if it's an array)
+struct object *object_a(struct object *object, char *path);
+
+// object_from_path: locates the object with 'path'
+struct object *object_from_path(struct object *root, char *path);
+
+// user_fromjson: creates a user from a json string input
+struct user *user_fromjson(char *s, size_t len);
+
+// user_free: frees the user object
+void user_free(struct user *user);
 
 // create_tables: execs create * statements on the database
 int create_tables(sqlite3 *db, char *fname);
@@ -120,13 +199,13 @@ int tags_insert(struct kvpairs *form, s64 rowid);
 int user_post(struct http_request_s *req, struct http_response_s *res);
 
 // user_insert: handles the inserting of a user
-int user_insert(struct kvpairs *form);
+int user_insert(struct user *user);
 
 // user_validation: returns true if this is a valid user form
-int user_validation(struct kvpairs *form);
+int user_validation(struct user *user);
 
 // user_login: logs the user in
-int user_login(struct http_request_s *req, struct http_response_s *res);
+int user_login(struct http_request_s *req, struct http_response_s *res, struct user *user);
 
 // user_setcookie: sets up a safe cookie with a 32 byte integer as the user's session id
 int user_setcookie(struct http_response_s *res, char *id);
@@ -221,38 +300,18 @@ void request_handler(struct http_request_s *req)
 
 	res = http_response_init();
 
-	if (0) { // send recipe form
-
-	// recipe endpoints
-    } else if (rcheck(req, "/recipe", "GET")) { // send recipe form
-		rc = send_file(req, res, "html/recipe.html");
-		CHKERR(503);
-
-	} else if (rcheck(req, "/recipe.js", "GET")) {
-		rc = send_file(req, res, "html/recipe.js");
-        CHKERR(503);
-
-	} else if (rcheck(req, "/recipe", "POST")) {
-		rc = recipe_post(req, res);
-		CHKERR(503);
-
-	} else if (rcheck(req, "/recipe", "PUT")) {
-		rc = recipe_put(req, res);
-		CHKERR(503);
-
-	} else if (rcheck(req, "/recipe", "DELETE")) {
-		rc = recipe_delete(req, res);
-		CHKERR(503);
-
-	} else if (rcheck(req, "/list", "GET")) {
-		rc = get_list(req, res, "v_list_recipe");
-		CHKERR(503);
-
-	} else if (rcheck(req, "/recipe.js", "GET")) {
-		rc = send_file(req, res, "html/recipe.js");
-		CHKERR(503);
+	if (0) {
 
     // user endpoints
+    } else if (rcheck(req, "/api/v1/user/create", "POST")) {
+        rc = user_post(req, res);
+        CHKERR(503);
+
+    } else if (rcheck(req, "/api/v1/user/login", "POST")) {
+        rc = -1;
+        CHKERR(503); // TODO (Brian) fix login too
+
+        /*
 	} else if (rcheck(req, "/newuser", "GET")) {
 		rc = send_file(req, res, "html/newuser.html");
         CHKERR(503);
@@ -280,6 +339,7 @@ void request_handler(struct http_request_s *req)
     } else if (rcheck(req, "/logout", "GET")) {
         rc = user_logout(req, res);
         CHKERR(503);
+        */
 
 	// static files, unrelated to main CRUD operations
 	} else if (rcheck(req, "/style.css", "GET")) {
@@ -375,26 +435,20 @@ int user_logout(struct http_request_s *req, struct http_response_s *res)
 }
 
 // user_login: logs the user in
-int user_login(struct http_request_s *req, struct http_response_s *res)
+int user_login(struct http_request_s *req, struct http_response_s *res, struct user *user)
 {
-    struct http_string_s body;
-    struct kvpairs form;
     sqlite3_stmt *stmt;
     char *username;
-    char *passwd;
-    char *sql;
-    char *hash;
+    char *password;
     char *id;
+    char *hash;
+    char *sql;
     int rc;
 
-    body = http_request_body(req);
+    username = user->username;
+    password = user->password;
 
-    form = parse_url_encoded(body);
-
-    username = getv(&form, "username");
-    passwd = getv(&form, "password");
-
-    if (username == NULL || passwd == NULL) {
+    if (username == NULL || password == NULL) {
         return -1;
     }
 
@@ -420,7 +474,7 @@ int user_login(struct http_request_s *req, struct http_response_s *res)
     // now, we'll check it against the password we got
     // if they match, you can be logged in
     // if not, we'll send you to the error page temporarily
-    if (crypto_pwhash_str_verify(hash, passwd, strlen(passwd)) == -1) {
+    if (crypto_pwhash_str_verify(hash, password, strlen(password)) == -1) {
         goto user_login_error;
     }
 
@@ -432,13 +486,14 @@ int user_login(struct http_request_s *req, struct http_response_s *res)
         return -1;
     }
 
+    // TODO (Brian) probably don't want to send the success file anymore
+
     send_file(req, res, "html/success.html");
 
     return 0;
 
 user_login_error:
     sqlite3_finalize(stmt);
-    free_kvpairs(form);
     return -1;
 }
 
@@ -964,51 +1019,52 @@ int recipe_validation(struct kvpairs *form)
 // user_post: handles the POSTing of a new user record
 int user_post(struct http_request_s *req, struct http_response_s *res)
 {
-    struct kvpairs form;
+    struct user *user;
     struct http_string_s body;
     int rc;
 
     body = http_request_body(req);
 
-    form = parse_url_encoded(body);
-
-    if (!user_validation(&form)) {
-        ERR("invalid user form data!\n");
-        goto user_post_error;
+    user = user_fromjson((char *)body.buf, body.len);
+    if (user == NULL) {
+        ERR("could not create user object from JSON input!");
+        return -1;
     }
 
-    rc = user_insert(&form);
+    if (user_validation(user) < 0) {
+        ERR("user object invalid!");
+        user_free(user);
+        return -1;
+    }
+
+    rc = user_insert(user);
     if (rc < 0) {
-        ERR("couldn't insert a user!\n");
-        goto user_post_error;
+        ERR("couldn't insert the user!");
+        user_free(user);
+        return -1;
     }
 
-    // now that we have a user, we want to log that person in
-    user_login(req, res);
+    rc = user_login(req, res, user);
+    if (rc < 0) {
+        ERR("couldn't log the user in!");
+        user_free(user);
+        return -1;
+    }
+
+    user_free(user);
 
     return 0;
-
-user_post_error:
-    free_kvpairs(form);
-    return -1;
 }
 
 // user_insert: handles the inserting of a user
-int user_insert(struct kvpairs *form)
+int user_insert(struct user *user)
 {
     sqlite3_stmt *stmt;
     char hash[crypto_pwhash_STRBYTES];
-    char *username;
-    char *email;
-    char *passwd;
     char *sql;
     int rc;
 
-    username = getv(form, "username");
-    email = getv(form, "email");
-    passwd = getv(form, "password");
-
-    rc = crypto_pwhash_str(hash, passwd, strlen(passwd), 3, 1 << 20);
+    rc = crypto_pwhash_str(hash, user->password, strlen(user->password), 3, 1 << 20);
     if (rc < 0) {
         return -1;
     }
@@ -1020,8 +1076,8 @@ int user_insert(struct kvpairs *form)
         return -1;
     }
 
-    sqlite3_bind_text(stmt, 1, username, -1, NULL);
-    sqlite3_bind_text(stmt, 2, email, -1, NULL);
+    sqlite3_bind_text(stmt, 1, user->username, -1, NULL);
+    sqlite3_bind_text(stmt, 2, user->email, -1, NULL);
     sqlite3_bind_text(stmt, 3, hash, -1, NULL);
 
     rc = sqlite3_step(stmt);
@@ -1036,57 +1092,44 @@ int user_insert(struct kvpairs *form)
 }
 
 // user_validation: returns true if this is a valid user form
-int user_validation(struct kvpairs *form)
+int user_validation(struct user *user)
 {
-    // NOTE (Brian) this NEEDS to mirror the exact rules in html/newuser.js
-    // otherwise, we'll be sending mixed signals.
-
-    char *username;
-    char *email;
-    char *passwd;
-    char *verify_passwd;
-
-    username = getv(form, "username");
-    email = getv(form, "email");
-    passwd = getv(form, "password");
-    verify_passwd = getv(form, "verify-password");
-
     // username
-    if (username == NULL) {
+    if (user->username == NULL) {
         return -1;
-    } else if (strlen(username) == 0) {
+    } else if (strlen(user->username) == 0) {
         return -1;
-    } else if (strlen(username) > 50) {
+    } else if (strlen(user->username) > 50) {
         return -1;
-    } else if (strchr(username, ' ') != NULL) {
+    } else if (strchr(user->username, ' ') != NULL) {
         return -1;
     }
 
     // email
-    if (email == NULL) {
+    if (user->email == NULL) {
         return -1;
-    } else if (strlen(email) == 0) {
+    } else if (strlen(user->email) == 0) {
         return -1;
     }
     // TODO (Brian) email regex
 
     // password
-    if (passwd == NULL) {
+    if (user->password == NULL) {
         return -1;
-    } else if (strlen(passwd) < 6) {
+    } else if (strlen(user->password) < 6) {
         return -1;
     }
 
     // verify_password
-    if (verify_passwd == NULL) {
+    if (user->verify == NULL) {
         return -1;
-    } else if (strlen(verify_passwd) == 0) {
+    } else if (strlen(user->verify) == 0) {
         return -1;
-    } else if (strcmp(passwd, verify_passwd) != 0) {
+    } else if (strcmp(user->password, user->verify) != 0) {
         return -1;
     }
 
-    return 1;
+    return 0;
 }
 
 // send_file: sends the file in the request, coalescing to '/index.html' from "html/"
@@ -1307,6 +1350,242 @@ struct kvpair kvpair(char *k, char *v)
 	pair.v = v;
 
 	return pair;
+}
+
+// user_fromjson: creates a user from a json string input
+struct user *user_fromjson(char *s, size_t len)
+{
+    struct user *user;
+    struct object *object;
+
+    object = object_from_json(s, len);
+    if (object == NULL) {
+        return NULL;
+    }
+
+    user = calloc(1, sizeof(*user));
+    if (user == NULL) {
+        object_free(object);
+        return NULL;
+    }
+
+    user->username = object_s(object, ".username");
+    user->password = object_s(object, ".password");
+    user->verify = object_s(object, ".verify");
+    user->email = object_s(object, ".email");
+
+    object_free(object);
+
+    return user;
+}
+
+// user_free: frees the user object
+void user_free(struct user *user)
+{
+    if (user) {
+        free(user->username);
+        free(user->password);
+        free(user->verify);
+        free(user->email);
+        free(user);
+    }
+}
+
+// object_t: locates the object with 'path', returns the type
+int object_t(struct object *object, char *path)
+{
+    struct object *z;
+
+    z = object_from_path(object, path);
+
+    return z == NULL ? OBJECT_UNDEFINED : z->type;
+}
+
+// object_s: locates the object with 'path', returns the string
+char *object_s(struct object *object, char *path)
+{
+    struct object *z;
+
+    z = object_from_path(object, path);
+
+    return z == NULL ? NULL : strdup(z->v_string);
+}
+
+// object_n: locates the object with 'path', returns the number
+double object_n(struct object *object, char *path)
+{
+    struct object *z;
+
+    z = object_from_path(object, path);
+
+    return z == NULL ? 0.0 : z->v_num;
+}
+
+// object_b: locates the object with 'path', returns the boolean
+int object_b(struct object *object, char *path)
+{
+    struct object *z;
+
+    z = object_from_path(object, path);
+
+    return z == NULL ? -1 : z->v_bool;
+}
+
+// object_o: finds the object with 'path', returns that object (NULL if it isn't an object)
+struct object *object_o(struct object *object, char *path)
+{
+    struct object *z;
+
+    z = object_from_path(object, path);
+
+    return z != NULL && z->type == OBJECT_OBJECT ? z : NULL;
+}
+
+// object_a: finds the object with 'path', returns that object (NULL if it's an array)
+struct object *object_a(struct object *object, char *path)
+{
+    struct object *z;
+
+    z = object_from_path(object, path);
+
+    return z != NULL && z->type == OBJECT_ARRAY ? z : NULL;
+}
+
+// object_from_path: locates the object with 'path'
+struct object *object_from_path(struct object *root, char *path)
+{
+    // NOTE (Brian) this function basically attempts to dereference strings until we get to an
+    // object / array dereference, then we return an attempt in the child to dereference.
+
+    struct object *curr;
+    char *k, *e;
+    size_t len;
+
+    if (root == NULL || path == NULL)
+        return NULL;
+
+    k = path;
+
+    if (k[0] == '.' || k[0] == '[') {
+        return object_from_path(root->child, path + 1);
+    } else {
+        for (e = k; *e && *e != '.' && *e != '[' && *e != ']'; e++)
+            ;
+
+        len = e - k;
+
+        for (curr = root; curr; curr = curr->next) {
+            if (strncmp(k, curr->k, len) == 0) {
+                return curr;
+            }
+        }
+
+        return NULL;
+    }
+}
+
+// object_from_json: creates an object from a list of json tokens
+struct object *object_from_json(char *s, size_t len)
+{
+    jsmn_parser parser;
+    jsmntok_t tokens[1024];
+    int rc;
+
+    jsmn_init(&parser);
+
+    rc = jsmn_parse(&parser, s, len, tokens, ARRSIZE(tokens));
+
+    if (rc < 0) {
+        return NULL;
+    }
+
+    return object_from_tokens(s, tokens, rc);
+}
+
+// object_from_tokens: recursive function building up the 'object' tree
+struct object *object_from_tokens(char *s, jsmntok_t *tokens, size_t len)
+{
+    struct object *object;
+    struct object *curr;
+    size_t i;
+    char *vstr;
+
+    jsmntok_t key, val;
+
+    if (len <= 0) {
+        return NULL;
+    }
+
+    object = calloc(1, sizeof(*object));
+
+    // do things based on what the key is
+    if (tokens[0].type == JSMN_OBJECT) {
+        object->type = OBJECT_OBJECT;
+
+        object->child = object_from_tokens(s, tokens + 1, tokens[0].size);
+        object->child->parent = object;
+    } else if (tokens[0].type == JSMN_ARRAY) {
+        object->type = OBJECT_ARRAY;
+
+        object->child = object_from_tokens(s, tokens + 1, tokens[0].size);
+        object->child->parent = object;
+    } else {
+
+        // NOTE (Brian): here's the part where we parse all of the k/v pairs of the JSON object.
+        // It's the case that when we get into this block, 'len' has the number of tokens left to
+        // parse. Given that while in this block we parse two tokens at a time (key and value), we
+        // simply continue until we have < 1 tokens, then we return
+
+        curr = object;
+
+        for (i = 0; i < len; i++) {
+            if (0 < i) {
+                curr->next = calloc(1, sizeof(*curr->next));
+                curr = curr->next;
+            }
+
+            key = tokens[i * 2 + 0];
+            val = tokens[i * 2 + 1];
+
+            vstr = s + val.start;
+
+            curr->k = strndup(s + key.start, key.end - key.start);
+
+            if (val.type == JSMN_STRING) {
+                curr->type = OBJECT_STRING;
+                curr->v_string = strndup(s + val.start, val.end - val.start);
+            } else if (vstr[0] == 't' || vstr[0] == 'f') { // check if value is boolean
+                curr->type = OBJECT_BOOL;
+                curr->v_bool = vstr[0] == 't';
+            } else if (isdigit(vstr[0]) || vstr[0] == '-') { // check if value is number
+                curr->type = OBJECT_NUM;
+                curr->v_num = atof(s + val.start);
+            } else if (vstr[0] == 'n') { // if it's NULL
+                curr->type = OBJECT_NULL;
+            } else {
+                assert(0); // HOW???
+            }
+        }
+    }
+
+    return object;
+}
+
+// object_free: frees the object
+void object_free(struct object *object)
+{
+    if (object) {
+        if (object->child)
+            object_free(object->child);
+
+        if (object->next)
+            object_free(object->next);
+
+        free(object->k);
+
+        if (object->type == OBJECT_STRING)
+            free(object->v_string);
+    }
 }
 
 // init: initializes the program
