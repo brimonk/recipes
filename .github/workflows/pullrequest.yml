@@ -1,0 +1,20 @@
+name: Pull Request CI
+
+on:
+    pull_request:
+    push:
+        branches:
+            - master
+
+jobs:
+    build:
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: checkout code
+              uses: actions/checkout@v2
+            - name: install dependencies
+              run: sudo apt-get install libsodium-dev libmagic-dev
+            - name: build
+              run: make
+
