@@ -1374,8 +1374,6 @@ struct user *user_fromjson(char *s, size_t len)
     user->verify = object_s(object, ".verify");
     user->email = object_s(object, ".email");
 
-    printf("username : %s\n", user->username);
-
     object_free(object);
 
     return user;
@@ -1518,8 +1516,6 @@ struct object *object_from_tokens(char *s, jsmntok_t *tokens, size_t len)
         return NULL;
     }
 
-    printf("len - %ld\n", len);
-
     object = calloc(1, sizeof(*object));
 
     // do things based on what the key is
@@ -1550,9 +1546,6 @@ struct object *object_from_tokens(char *s, jsmntok_t *tokens, size_t len)
 
             key = tokens[i * 2 + 0];
             val = tokens[i * 2 + 1];
-
-            printf("parsing key '%.*s'\n", key.end - key.start, s + key.start);
-            printf("parsing val '%.*s'\n", val.end - val.start, s + val.start);
 
             vstr = s + val.start;
 
