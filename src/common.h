@@ -36,6 +36,9 @@
 
 #include <assert.h>
 
+// NOTE (Brian) this is kind of a crummy place for this macro to go.
+#define SQLITE_ERRMSG(x) (fprintf(stderr, "Error: %s\n", sqlite3_errstr(rc)))
+
 #define SWAP(x, y, T) do { T SWAP = x; x = y; y = SWAP; } while (0)
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
@@ -577,11 +580,11 @@ int c_fprintf(char *file, int line, const char *func, int level, FILE *fp, char 
 	if (level == LOG_DBG) {
 		// Format:
 		//   __FUNC__:__LINE__ LEVELSTR MESSAGE
-		rc += fprintf(fp, "%16s:%04d %s ", func, line, logstr[level]);
+		rc += fprintf(fp, "%16s:%04d %s\n", func, line, logstr[level]);
 	} else {
 		// Format:
 		//   __LEVELSTR__ MESSAGE
-		rc += fprintf(fp, "%s ", logstr[level]);
+		rc += fprintf(fp, "%s\n", logstr[level]);
 	}
 
 	rc += vfprintf(fp, fmt, args);
