@@ -27,6 +27,7 @@ int user_api_newuser(struct http_request_s *req, struct http_response_s *res)
 {
     struct User *user;
     struct http_string_s body;
+    char *cookie;
     int rc;
 
     body = http_request_body(req);
@@ -66,7 +67,15 @@ int user_api_newuser(struct http_request_s *req, struct http_response_s *res)
         return -1;
     }
 
+    // setup the cookie on the response
+    http_response_status(res, 200);
+    cookie = user_getcookie(user);
+    http_response_header(res, "Set-Cookie", cookie);
+
+    http_respond(req, res);
+
     user_free(user);
+    free(cookie);
 
     return 0;
 }
@@ -76,6 +85,7 @@ int user_api_login(struct http_request_s *req, struct http_response_s *res)
 {
 	struct User *user;
 	struct http_string_s body;
+    char *cookie;
 	int rc;
 
 	body = http_request_body(req);
@@ -118,7 +128,14 @@ int user_api_login(struct http_request_s *req, struct http_response_s *res)
 		return -1;
 	}
 
+    http_response_status(res, 200);
+    cookie = user_getcookie(user);
+    http_response_header(res, "Set-Cookie", cookie);
+
+    http_respond(req, res);
+
 	user_free(user);
+    free(cookie);
 
 	return 0;
 }
@@ -140,6 +157,9 @@ int user_api_logout(struct http_request_s *req, struct http_response_s *res)
 		free(secret);
 		return -1;
 	}
+
+    http_response_status(res, 200);
+    http_respond(req, res);
 
 	return 0;
 }
@@ -316,7 +336,7 @@ int user_makesecret(struct User *user)
 
 	sodium_bin2base64(session_base64, sizeof session_base64, session_id, sizeof session_id, variant);
 
-	user->secret = strndup(session_base64, 128);
+	user->secret = strndup(session_base64, sizeof session_base64);
 
 	return 0;
 }
@@ -354,38 +374,46 @@ int user_validation(struct User *user)
 	// TODO (Brian) ensure that this won't fail on login (check ui code)
 
     // username
-    if (user->username == NULL) {
-        return -1;
-    } else if (strlen(user->username) == 0) {
-        return -1;
-    } else if (strlen(user->username) > 50) {
-        return -1;
-    } else if (strchr(user->username, ' ') != NULL) {
-        return -1;
+    if (user->context == USER_CONTEXT_LOGIN || user->context == USER_CONTEXT_NEWUSER) {
+        if (user->username == NULL) {
+            return -1;
+        } else if (strlen(user->username) == 0) {
+            return -1;
+        } else if (strlen(user->username) > 50) {
+            return -1;
+        } else if (strchr(user->username, ' ') != NULL) {
+            return -1;
+        }
     }
 
     // email
-    if (user->email == NULL) {
-        return -1;
-    } else if (strlen(user->email) == 0) {
-        return -1;
+    if (user->context == USER_CONTEXT_NEWUSER) {
+        if (user->email == NULL) {
+            return -1;
+        } else if (strlen(user->email) == 0) {
+            return -1;
+        }
+        // TODO (Brian) email regex
     }
-    // TODO (Brian) email regex
 
     // password
-    if (user->password == NULL) {
-        return -1;
-    } else if (strlen(user->password) < 6) {
-        return -1;
+    if (user->context == USER_CONTEXT_LOGIN || user->context == USER_CONTEXT_NEWUSER) {
+        if (user->password == NULL) {
+            return -1;
+        } else if (strlen(user->password) < 6) {
+            return -1;
+        }
     }
 
     // verify_password
-    if (user->verify == NULL) {
-        return -1;
-    } else if (strlen(user->verify) == 0) {
-        return -1;
-    } else if (strcmp(user->password, user->verify) != 0) {
-        return -1;
+    if (user->context == USER_CONTEXT_NEWUSER) {
+        if (user->verify == NULL) {
+            return -1;
+        } else if (strlen(user->verify) == 0) {
+            return -1;
+        } else if (strcmp(user->password, user->verify) != 0) {
+            return -1;
+        }
     }
 
     return 0;
@@ -424,6 +452,22 @@ char *user_secret_from_request(struct http_request_s *req)
 	}
 
 	return strndup(s, e - s);
+}
+
+// user_getcookie: sets the user cookie on the response
+char *user_getcookie(struct User *user)
+{
+    char cookie[BUFLARGE];
+    int max_age;
+
+    // TODO (Brian) setup a reasonable way to toggle the "Secure" flag on this cookie
+    // Right now, there isn't a great way because we don't have any SSL logic in this repo.
+
+    max_age = 60 * 60 * 24 * 7;
+
+    snprintf(cookie, sizeof cookie, "session=%s; Path=/; Max-Age=%d", user->secret, max_age);
+
+    return strdup(cookie);
 }
 
 // user_from_session: creates a user from the database and the session key

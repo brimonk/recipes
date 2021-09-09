@@ -98,6 +98,9 @@ int user_logout(char *secret);
 // user_haspass: return true if the user in this object is legit
 int user_haspass(struct User *user);
 
+// user_getcookie: sets the user cookie on the response
+char *user_getcookie(struct User *user);
+
 // user_secret_from_request: returns the secret from the user's session
 char *user_secret_from_request(struct http_request_s *req);
 
