@@ -210,7 +210,7 @@ class User {
             }
         }
 
-        if (this.context === "login" || this.context === "newuser") {
+        if (this.context === "newuser") {
             // pass && 6 < pass.len
             if (this.verify.length === 0) {
                 errors.push(new VError("verify", "You must provide a value!"));
@@ -267,7 +267,7 @@ class User {
 
         return m.request({
             method: "POST",
-            url: "/api/v1/user/create",
+            url: "/api/v1/user/login",
             body: data,
         });
     }
@@ -275,16 +275,14 @@ class User {
 
 // LoginComponent
 function LoginComponent(inivialVnode) {
-    const user = new User();
+    const user = new User("login");
 
     return {
         view: function(vnode) {
             return m(".login", [
                 m("form", {
-                    class: "container mx-auto px-2 " + CARD_CLASS,
                     onsubmit: function (e) {
                         e.preventDefault();
-                        console.log("submitted the form");
                     },
                 }, [
                     m("h2", "Login"),
@@ -309,8 +307,17 @@ function LoginComponent(inivialVnode) {
 
                         m("div", [
                             m("button.button[type=button]", {
-                                onclick: function() { user.login(); }
+                                onclick: function() {
+                                    user.login()
+                                        .then((x) => {
+                                            m.route.set("/");
+                                        })
+                                        .catch((err) => {
+                                            console.error(err);
+                                        });
+                                }
                             }, "Login"),
+
                             m("button.button[type=button]", {
                                 onclick: function() { m.route.set("/home"); }
                             }, "Cancel"),
@@ -335,7 +342,6 @@ function NewUserComponent(initialVnode) {
                 m("form", {
                     onsubmit: function (e) {
                         e.preventDefault();
-                        console.log("submitted the form");
                     },
                 }, [
                     m("h2", "New User"),
@@ -376,8 +382,17 @@ function NewUserComponent(initialVnode) {
 
                         m("div", [
                             m("button.button[type=submit]", {
-                                onclick: function() { user.create(); }
+                                onclick: function() {
+                                    user.create()
+                                        .then((x) => {
+                                            m.route.set("/");
+                                        })
+                                        .catch((err) => {
+                                            console.error(err);
+                                        });
+                                }
                             }, "Save"),
+
                             m("button.button[type=button]", {
                                 onclick: function() { m.route.set("/home"); },
                             }, "Cancel"),
