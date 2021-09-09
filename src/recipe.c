@@ -69,6 +69,9 @@ int rcheck(struct http_request_s *req, char *target, char *method);
 // parse_url_encoded: parses the query out from the http_string_s
 struct object *parse_url_encoded(struct http_string_s parseme);
 
+// send_style: sends the style sheet, and ensures the correct mime type is sent
+int send_style(struct http_request_s *req, struct http_response_s *res, char *path);
+
 // send_file: sends the file in the request, coalescing to '/index.html' from "html/"
 int send_file(struct http_request_s *req, struct http_response_s *res, char *path);
 
@@ -203,6 +206,10 @@ void request_handler(struct http_request_s *req)
 		rc = send_file(req, res, "html/ui.js");
         CHKERR(503);
 
+	} else if (rcheck(req, "/styles.css", "GET")) {
+		rc = send_style(req, res, "html/styles.css");
+        CHKERR(503);
+
 	} else {
         SNDERR(404);
 	}
@@ -330,6 +337,37 @@ int get_list(struct http_request_s *req, struct http_response_s *res, char *tabl
 
 	return 0;
 #endif
+}
+
+// send_style: sends the style sheet, and ensures the correct mime type is sent
+int send_style(struct http_request_s *req, struct http_response_s *res, char *path)
+{
+	char *file_data;
+	size_t len;
+
+    // NOTE (Brian) there's a small issue with libmagic setting the mime type for css correctly, so
+    // I'm basically doing this myself. Without this, the server just sends "text/plain" as the
+    // type, and the browser doesn't like that.
+
+	if (path == NULL) {
+		return -1;
+	}
+
+	if (access(path, F_OK) == 0) {
+		file_data = sys_readfile(path, &len);
+
+		http_response_status(res, 200);
+		http_response_header(res, "Content-Type", "text/css");
+		http_response_body(res, file_data, len);
+
+		http_respond(req, res);
+
+		free(file_data);
+	} else {
+		send_error(req, res, 404);
+	}
+
+	return 0;
 }
 
 // send_file: sends the file in the request, coalescing to '/index.html' from "html/"
