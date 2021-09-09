@@ -13,13 +13,57 @@ function VError(prop, msg) {
     return { prop: prop, msg: msg };
 }
 
+// ListComponent: a component that helps us manipulate and mangle lists
+function ListComponent(initialVnode) {
+    let list = initialVnode.attrs.list;
+    console.log(list);
+
+    if (list.length === 0) {
+        list.push("");
+    }
+
+    const add_btn = m("button[type=button]", {
+        // add a new item at the end of the list
+        onclick: () => list.push("")
+    }, "+");
+
+    return {
+        view: function(vnode) {
+            const inputs = list.map((e, i, a) => {
+                const is_last = i === a.length - 1;
+
+                const input = m("input", {
+                    value: a[i],
+                    oninput: (e) => a[i] = e.target.value,
+                });
+
+                const sub_btn = m("button[type=button]", {
+                    onclick: () => list.splice(i, 1)
+                }, "-");
+
+                let controls = [ input ];
+
+                if (a.length > 1) {
+                    controls.push(sub_btn);
+                }
+
+                return m("div", controls);
+            });
+
+            let controls = [ inputs, add_btn ];
+
+            return m("div", controls);
+        }
+    };
+}
+
 // MenuComponent
 function MenuComponent(initialVnode) {
     return {
         view: function(vnode) {
             return m("nav", [
                 m(m.route.Link, { href: "/" }, "Home"),
-                m(m.route.Link, { href: "/recipe" }, "New Recipe"),
+                m(m.route.Link, { href: "/recipe/new" }, "New Recipe"),
                 m(m.route.Link, { href: "/search" }, "Search"),
             ]);
         }
@@ -28,17 +72,50 @@ function MenuComponent(initialVnode) {
 
 // Recipe: the Recipe data structure
 class Recipe {
-    constructor() {
-        this.name = "";
+    constructor(id) {
+        this.id = id;
 
-        this.cook_time = -1;
-        this.prep_time = -1;
+        if (this.id) {
+            this.fetch();
+        } else {
+            this.name = "";
 
-        this.notes = "";
+            this.cook_time = -1;
+            this.prep_time = -1;
 
-        this.ingredients = [];
-        this.steps = [];
-        this.tags = [];
+            this.notes = "";
+
+            this.ingredients = [];
+            this.steps = [];
+            this.tags = [];
+        }
+    }
+
+    // fetch: fetches from the remote
+    fetch() {
+        return m.request({
+            method: "GET",
+            url: `/api/v1/recipe/${this.id}`,
+        }).then((x) => {
+            console.log(`got recipe, ${this.id}`);
+            console.log(x);
+
+            this.name = x.name;
+
+            this.cook_time = x.cook_time;
+            this.prep_time = x.prep_time;
+
+            this.notes = "";
+
+            this.ingredients = [];
+            this.steps = [];
+            this.tags = [];
+        }).catch((err) => {
+            console.error(err);
+        });
+    }
+
+    load(obj) {
     }
 
     // isValid: returns true if the object is valid for upserting
@@ -47,14 +124,74 @@ class Recipe {
     }
 }
 
-// RecipeComponent
+// RecipeComponent: Handles Recipe CRUD Operations
 function RecipeComponent(initialVnode) {
+    let id = m.route.param("id");
+    let recipe = new Recipe(id);
+
     return {
         view: function(vnode) {
+            // testing just with the name
+            let name_ctrl = m("input", {
+                value: recipe.name,
+                oninput: (e) => {
+                    recipe.name = e.target.value;
+                },
+            });
+
+            let cook_time_ctrl = m("input", {
+                value: recipe.cook_time,
+                oninput: (e) => {
+                    const val = e.target.value.replace(/\D/g, "")
+                    recipe.cook_time = parseInt(val, 10);
+                },
+            });
+
+            let prep_time_ctrl = m("input", {
+                value: recipe.prep_time,
+                oninput: (e) => {
+                    const val = e.target.value.replace(/\D/g, "")
+                    recipe.prep_time = parseInt(val, 10);
+                },
+            });
+
+            let notes_ctrl = m("textarea", {
+                value: recipe.notes,
+                oninput: (e) => {
+                    recipe.notes = e.target.value;
+                },
+            });
+
+            let ingredients_ctrl = m(ListComponent, { list: recipe.ingredients });
+
+            let steps_ctrl = m(ListComponent, { list: recipe.steps });
+
+            let tags_ctrl = m(ListComponent, { list: recipe.tags });
+
+            let log_button = m("button[type=button]", {
+                onclick: (e) => console.log(recipe)
+            }, "Dump Object State");
 
             return [
                 m(MenuComponent),
-                m("h3", "Recipe Page"),
+                m("h3", id ? recipe.name : "New Recipe"),
+                m("div", [
+                    m("h4", "Name"),
+                    name_ctrl,
+                    m("h4", "Cook Time"),
+                    cook_time_ctrl,
+                    m("h4", "Prep Time"),
+                    prep_time_ctrl,
+                    m("h4", "Ingredients"),
+                    ingredients_ctrl,
+                    m("h4", "Steps"),
+                    steps_ctrl,
+                    m("h4", "Tags"),
+                    tags_ctrl,
+                    m("h4", "Notes"),
+                    notes_ctrl,
+                    log_button
+                ]),
             ];
         }
     }
@@ -415,6 +552,7 @@ const routes = {
     "/newuser": NewUserComponent,
     "/search": SearchComponent,
     "/login": LoginComponent,
+    "/recipe/new": RecipeComponent,
     "/recipe/:id": RecipeComponent,
 };
 
