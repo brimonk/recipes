@@ -1,5 +1,7 @@
 # No Dependencies on External Package Managers
 
+**Date:** 2021-09-14 03:13:13
+
 ## Context
 
 Most software is kind of a pain in the butt to get hold of. Normally, there's a very expensive, very
