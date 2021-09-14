@@ -4,7 +4,9 @@
 *.db-shm
 *.db-wal
 *.so
+
 recipe
+meta
 
 .gdb*
 

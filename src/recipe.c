@@ -181,6 +181,7 @@ void request_handler(struct http_request_s *req)
 	if (0) {
 
     // user endpoints
+#if 0
     } else if (rcheck(req, "/api/v1/user/create", "POST")) {
         rc = user_api_newuser(req, res);
         CHKERR(503);
@@ -192,6 +193,7 @@ void request_handler(struct http_request_s *req)
 	} else if (rcheck(req, "/api/v1/user/logout", "POST")) {
 		rc = user_api_logout(req, res);
 		CHKERR(503);
+#endif
 
 	// static files, unrelated to main CRUD operations
 	} else if (rcheck(req, "/style.css", "GET")) {
