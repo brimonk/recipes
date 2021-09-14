@@ -15,6 +15,8 @@
 #include "user.h"
 #include "object.h"
 
+#include "generated.h"
+
 #define PORT (2000)
 
 // STATIC STUFF

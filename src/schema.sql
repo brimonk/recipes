@@ -91,7 +91,7 @@ create table if not exists tag
     , updated_ts text default null
     , recipe_id  text not null
 
-    , text not null
+    , text       text not null
 
     , foreign key (recipe_id) references recipe(id)
 );

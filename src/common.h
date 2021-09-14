@@ -577,14 +577,14 @@ int c_fprintf(char *file, int line, const char *func, int level, FILE *fp, char 
 
 	va_start(args, fmt); /* get the arguments from the stack */
 
-	if (level == LOG_DBG) {
-		// Format:
-		//   __FUNC__:__LINE__ LEVELSTR MESSAGE
-		rc += fprintf(fp, "%16s:%04d %s", func, line, logstr[level]);
-	} else {
+	if (level == LOG_LOG) {
 		// Format:
 		//   __LEVELSTR__ MESSAGE
-		rc += fprintf(fp, "%s", logstr[level]);
+		rc += fprintf(fp, "%s ", logstr[level]);
+	} else {
+		// Format:
+		//   __FUNC__:__LINE__ LEVELSTR MESSAGE
+		rc += fprintf(fp, "%16s:%04d %s ", func, line, logstr[level]);
 	}
 
 	rc += vfprintf(fp, fmt, args);

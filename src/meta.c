@@ -39,6 +39,24 @@ int create_tables(sqlite3 *db, char *fname);
 // help: prints help info
 void help(char *prog);
 
+char *GetCType(char *sqltype)
+{
+	// NOTE (Brian) this is totally for sqlite only because of the data type assumptions.
+
+	if (sqltype == NULL)
+		return NULL;
+	if (sqltype[0] == 'i')
+		return "db_int64";
+	if (sqltype[0] == 'r')
+		return "db_double";
+	if (sqltype[0] == 't')
+		return "db_string";
+	if (sqltype[0] == 'b')
+		return "db_blob";
+	ERR("couldn't find c datatype for db datatype: '%s'!\n", sqltype);
+	return NULL;
+}
+
 // metaprogram_cb: sqlite3_exec callback function for src/metaprogram.sql
 int metaprogram_cb(void *ptr, int colnum, char **vals, char **cols)
 {
@@ -103,7 +121,9 @@ void PrintImplementationGuardEnd(void)
 
 void PrintDatabaseTypes(void)
 {
+	printf("#include <stddef.h>\n");
 	printf("#include <stdint.h>\n");
+	printf("\n");
 
 	// NOTE (Brian): this totally includes more types than we'll ever need for SQLite. SQLite types
 	// are loosey goosey like JSON types, so we'll basically end up using like, ~5 of these.
@@ -121,8 +141,8 @@ void PrintDatabaseTypes(void)
 	printf("typedef uint64_t db_uint64;\n");
 	printf("\n");
 
-	printf("typedef float    db_f32;\n");
-	printf("typedef double   db_f64;\n");
+	printf("typedef float    db_float;\n");
+	printf("typedef double   db_double;\n");
 	printf("\n");
 
 	printf("typedef struct {\n");
@@ -137,7 +157,7 @@ void PrintDatabaseTypes(void)
 	printf("} db_blob;\n");
 	printf("\n");
 
-	printf("typdef struct {\n");
+	printf("typedef struct {\n");
 	printf("\tchar *tabname;\n");
 	printf("\tchar *colname;\n");
 	printf("\tchar *coltype;\n");
@@ -151,6 +171,37 @@ void PrintDatabaseTypes(void)
 void PrintStructures(metadata_list_t *list)
 {
 	size_t i;
+	char *tabname;
+
+	for (tabname = NULL, i = 0; i < list->data_len; i++) {
+		if (tabname == NULL || !streq(tabname, list->data[i].table_name)) {
+			if (tabname != NULL) {
+				printf("} %s_t;\n", tabname);
+				printf("\n");
+			}
+
+			printf("typedef struct {\n");
+
+			tabname = list->data[i].table_name;
+		}
+
+		// NOTE (Brian): Here really isn't the greatest place for a datatype check because we've
+		// already generated a whole bunch of the file, but we can move that later when we rewrite
+		// this.
+
+		if (list->data[i].coltype == NULL) {
+			ERR("index %d has a NULL column type!\n", i);
+		}
+
+		if (list->data[i].colname == NULL) {
+			ERR("index %d has a NULL column name!\n", i);
+		}
+
+		printf("\t%s %s;\n", GetCType(list->data[i].coltype), list->data[i].colname);
+	}
+
+	printf("} %s_t;\n", tabname);
+	printf("\n");
 }
 
 void PrintMetadataTable(metadata_list_t *list)
