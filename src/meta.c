@@ -17,6 +17,8 @@
 
 #define USAGE ("%s <dbname>\n")
 
+#define CMNT(fmt, ...) (printf("// " fmt, ##__VA_ARGS__))
+
 static sqlite3 *db;
 
 typedef struct {
@@ -123,6 +125,8 @@ void PrintDatabaseTypes(void)
 {
 	printf("#include <stddef.h>\n");
 	printf("#include <stdint.h>\n");
+	printf("\n");
+	printf("#include \"httpserver.h\"\n");
 	printf("\n");
 
 	// NOTE (Brian): this totally includes more types than we'll ever need for SQLite. SQLite types
@@ -236,17 +240,82 @@ void PrintMetadataTable(metadata_list_t *list)
 
 void PrintDBFunctionDef(metadata_list_t *list)
 {
-	size_t i;
+	char *tabname;
+	// NOTE (Brian): Select is special, so it doesn't belong in here
+	char *ops[] = { "insert", "update", "delete" };
+	size_t i, j;
+
+	tabname = NULL;
+
+	for (i = 0; i < list->data_len; i++) {
+		if (tabname == NULL || !streq(tabname, list->data[i].table_name)) {
+			tabname = list->data[i].table_name;
+
+			for (j = 0; j < ARRSIZE(ops); j++) {
+				CMNT("db_%s_%s: handles '%s' operations for the '%s' table\n",
+					tabname, ops[j], ops[j], tabname);
+				printf("int db_%s_%s(%s_t *item);\n", tabname, ops[j], tabname);
+			}
+
+			CMNT("db_%s_select_by_id: handles 'select' operations for the '%s' table, by id\n",
+				tabname, tabname);
+			printf("%s_t *db_%s_select_by_id(char *id);\n", tabname, tabname);
+
+			// NOTE (Brian) Because I haven't yet decided on the WHERE clause criteria, we don't
+			// have that in yet. It could be the case that this will actually just be enough, who
+			// knows. Single select by Id covers nearly every use-case.
+
+			printf("\n");
+		}
+	}
+
 }
 
 void PrintJSONFunctionDef(metadata_list_t *list)
 {
+	char *tabname;
 	size_t i;
+
+	tabname = NULL;
+
+	for (i = 0; i < list->data_len; i++) {
+		if (tabname == NULL || !streq(tabname, list->data[i].table_name)) {
+			tabname = list->data[i].table_name;
+
+			CMNT("json_parse_%s: a json parsing function for the '%s' table\n", tabname, tabname);
+			printf("%s_t *json_parse_%s(char *s, size_t len);\n", tabname, tabname);
+			printf("\n");
+		}
+	}
 }
 
 void PrintAPIFunctionDef(metadata_list_t *list)
 {
-	size_t i;
+	char *tabname;
+	char funcname[BUFSMALL];
+	char *params;
+	char *http[] = { "get", "post", "put", "delete" };
+	size_t i, j;
+
+	// NOTE (Brian): Each table gets a set of 'get' 'post' 'put' and 'delete' functions, which will
+	// perform normal database operations on those tables.
+
+	params = "struct http_request_s *req, struct http_response_s *res";
+	tabname = NULL;
+
+	for (i = 0; i < list->data_len; i++) {
+		if (tabname == NULL || !streq(tabname, list->data[i].table_name)) {
+			tabname = list->data[i].table_name;
+
+			for (j = 0; j < ARRSIZE(http); j++) {
+				snprintf(funcname, sizeof funcname, "http_%s_%s", tabname, http[j]);
+				CMNT("%s: the http '%s' handler for the '%s' table\n", funcname, http[j], tabname);
+				printf("int %s(%s);\n", funcname, params);
+			}
+
+			printf("\n");
+		}
+	}
 }
 
 void PrintDBFunctions(metadata_list_t *list)
@@ -306,6 +375,23 @@ int create_tables(sqlite3 *db, char *fname)
 	return 0;
 }
 
+void PrintHeaderCopyright(void)
+{
+	time_t now;
+	struct tm tm;
+
+	time(&now);
+
+	tm = *(localtime(&now));
+
+	CMNT("Brian Chrzanowski (C) %d\n", tm.tm_year + 1900);
+	CMNT("\n");
+	CMNT("This file was generated using the 'meta' program inside of the repository.\n");
+	CMNT("Upon additional schema updates and builds, it will become overwritten.\n");
+
+	printf("\n");
+}
+
 // help: prints help info
 void help(char *prog)
 {
@@ -363,6 +449,8 @@ int main(int argc, char **argv)
 	// We have all of the data we need at this point to generate the header.
 
 	PrintHeader();
+
+	PrintHeaderCopyright();
 
 	PrintDatabaseTypes();
 	PrintStructures(&list);
