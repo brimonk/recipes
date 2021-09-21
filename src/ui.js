@@ -1,5 +1,14 @@
 // Brian Chrzanowski
 // 2021-09-07 01:17:08
+//
+// There are a few interesting things you should know about the application.
+//
+// Basically, all of the form elements that revolve around using and setting data in a form all have
+// a backing data structure / class that has all of the smarts for the form.
+//
+// As an example, the Recipe class has an 'errors' object inside of it, with the errors for every
+// single field as they apply. When the 'InputComponent' creates itself, it reads from that 'errors'
+// object, and determines if it needs to print out an error below the input, for example.
 
 const email_re = /^(([^<>()[\]\\.,;:\s@\"]+(\.[^<>()[\]\\.,;:\s@\"]+)*)|(\".+\"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;
 
@@ -37,6 +46,11 @@ function DIV(arg) {
     return m("div", arg);
 }
 
+// Button: returns a small button wrapper
+function Button(text, fn) {
+    return m("button[type=button]", { onclick: (e) => fn(e) }, text);
+}
+
 // InputComponent: a little more complicated than the others
 function InputComponent(initialVnode) {
     let object = initialVnode.attrs.object;
@@ -71,14 +85,32 @@ function InputComponent(initialVnode) {
     };
 }
 
+// TextAreaComponent: a small text area wrapper thing
 function TextAreaComponent(initialVnode) {
     let object = initialVnode.attrs.object;
     let prop = initialVnode.attrs.prop;
+
+    let cols = initialVnode.attrs.cols;
+    let rows = initialVnode.attrs.rows;
     let maxlen = initialVnode.attrs.maxlen;
+
+    const coalesce = (x, def) => {
+        if (x !== +x)
+            return def;
+        return +x;
+    };
+
+    cols = coalesce(cols, 5);
+    rows = coalesce(cols, 5);
+    maxlen = coalesce(maxlen, 200);
 
     return {
         view: function(vnode) {
-            return m("textarea", {
+            return m(`textarea`, {
+                cols: cols,
+                rows: rows,
+                maxlength: maxlen,
+
                 value: object[prop],
                 oninput: (e) => {
                     object[prop] = e.target.value;
@@ -91,9 +123,14 @@ function TextAreaComponent(initialVnode) {
 // ListComponent: a component that helps us manipulate and mangle lists
 function ListComponent(initialVnode) {
     let list = initialVnode.attrs.list;
+    let type = initialVnode.attrs.type;
 
     if (list.length === 0) {
         list.push("");
+    }
+
+    if (!type) {
+        type = "ul";
     }
 
     const add_btn = m("button[type=button]", {
@@ -121,12 +158,12 @@ function ListComponent(initialVnode) {
                     controls.push(sub_btn);
                 }
 
-                return m("div", controls);
+                return m("li", controls);
             });
 
             let controls = [ inputs, add_btn ];
 
-            return m("div", controls);
+            return m(type, controls);
         }
     };
 }
@@ -196,6 +233,11 @@ class Recipe {
     isValid() {
         return true;
     }
+
+    submit() {
+        if (!isValid) {
+        }
+    }
 }
 
 // RecipeComponent: Handles Recipe CRUD Operations
@@ -219,23 +261,29 @@ function RecipeComponent(initialVnode) {
             });
 
             let notes_ctrl = m(TextAreaComponent, {
-                object: recipe, prop: "notes",
+                object: recipe, prop: "notes", rows: 15, cols: 100
             });
 
-            let ingredients_ctrl = m(ListComponent, { list: recipe.ingredients });
+            let ingredients_ctrl = m(ListComponent, {
+                list: recipe.ingredients, type: "ul",
+            });
 
-            let steps_ctrl = m(ListComponent, { list: recipe.steps });
+            let steps_ctrl = m(ListComponent, {
+                list: recipe.steps, type: "ol",
+            });
 
-            let tags_ctrl = m(ListComponent, { list: recipe.tags });
+            let tags_ctrl = m(ListComponent, {
+                list: recipe.tags, type: "ul",
+            });
 
-            let log_button = m("button[type=button]", {
-                onclick: (e) => console.log(recipe)
-            }, "Dump Object State");
+            let log_button = Button("Dump Object State", (e) => console.log(recipe));
+
+            let submit_button = Button("Submit", (e) => recipe.submit());
+
+            let cancel_button = Button("Cancel", (e) => m.route.set("/"));
 
             return [
                 m(MenuComponent),
-
-                H3("Recipe Page"),
 
                 H3(id ? recipe.name : "New Recipe"),
 
@@ -248,7 +296,7 @@ function RecipeComponent(initialVnode) {
                     H4("Tags"), tags_ctrl,
                     H4("Notes"), notes_ctrl,
 
-                    log_button
+                    DIV([ log_button, submit_button, cancel_button ])
                 ]),
             ];
         }
