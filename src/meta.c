@@ -35,6 +35,8 @@ typedef struct {
 	size_t data_len, data_cap;
 } metadata_list_t;
 
+char *restricted_cols[] = { "id", "created_ts", "updated_ts" };
+
 // create_tables: bootstraps the database (and the rest of the app)
 int create_tables(sqlite3 *db, char *fname);
 
@@ -318,9 +320,138 @@ void PrintAPIFunctionDef(metadata_list_t *list)
 	}
 }
 
-void PrintDBFunctions(metadata_list_t *list)
+int ColumnComplement(char **columns, size_t *cols_len, metadata_t *data, size_t data_len)
+{
+	size_t i, j, next;
+
+	assert(columns);
+	assert(data);
+	assert(cols_len);
+
+	next = 0;
+
+	for (i = 0; i < data_len; i++) {
+		for (j = 0; j < ARRSIZE(restricted_cols); j++) {
+			if (streq(data[i].colname, restricted_cols[j]))
+				break;
+		}
+
+		if (j == ARRSIZE(restricted_cols)) {
+			columns[next++] = data[i].colname;
+		}
+	}
+
+	*cols_len = next;
+
+	return 0;
+}
+
+void PrintDBInsert(metadata_t *data, size_t len)
+{
+	char *columns[64];
+	size_t usable;
+	char *tabname;
+	char buf[BUFLARGE];
+	size_t i, j;
+	int rc;
+
+	// NOTE (Brian) this assumes that you have an 'extern sqlite3 *db' defined
+
+	assert(data != NULL);
+	assert(len <= ARRSIZE(columns));
+
+	usable = ARRSIZE(columns);
+
+	tabname = data[0].table_name;
+
+	// declaration
+	CMNT("db_%s_insert: handles 'insert' operations for the '%s' table\n", tabname, tabname);
+	printf("int db_%s_insert(%s_t *item)\n", tabname, tabname);
+	printf("{\n");
+
+	printf("\tsqlite3_stmt *stmt\n");
+	printf("\tchar *sql\n");
+	printf("\tint rc;\n");
+	printf("\n");
+
+	rc = 0;
+
+	// generate the sql statement, and include it in the output
+
+	// first, aggregate the columns we'll allow users to enter
+	ColumnComplement((char **)columns, &usable, data, len);
+
+	rc += snprintf(buf + rc, sizeof buf - rc, "insert into %s (", tabname);
+
+	for (i = 0; i < usable; i++) {
+		rc += snprintf(buf + rc, sizeof buf - rc, "%s%s", columns[i], i == usable - 1 ? "" : ", ");
+	}
+
+	rc += snprintf(buf + rc, sizeof buf - rc, ") values (");
+
+	for (i = 0; i < usable; i++) {
+		rc += snprintf(buf + rc, sizeof buf - rc, "%s%s", "?", i == usable - 1 ? "" : ", ");
+	}
+
+	rc += snprintf(buf + rc, sizeof buf - rc, ");");
+
+	printf("\tsql = \"%s\";\n", buf);
+	printf("\n");
+
+	printf("\trc = sqlite3_prepare_v2(&db, sql, -1, &stmt, NULL);\n");
+	printf("\tif (rc != SQLITE_OK) {\n");
+	printf("\t\tfprintf(stderr, \"couldn't prepare the sql statement!\\n\");\n");
+	printf("\t}\n");
+	printf("\n");
+
+	for (i = 0; i < usable; i++) {
+	}
+
+	printf("\treturn 0;\n");
+	printf("}\n");
+	printf("\n");
+}
+
+void PrintDBUpdate(metadata_t *data, size_t len)
 {
 	size_t i;
+}
+
+void PrintDBDelete(metadata_t *data, size_t len)
+{
+	size_t i;
+}
+
+void PrintDBFunctions(metadata_list_t *list)
+{
+	char *tabname;
+	size_t total;
+	size_t i, last;
+
+	for (tabname = NULL, i = last = 0; i < list->data_len; i++) {
+		if (tabname == NULL) {
+			tabname = list->data[i].table_name;
+		}
+
+		if (!streq(tabname, list->data[i].table_name)) {
+
+			total = i - last;
+
+			PrintDBInsert(list->data + last, total);
+			PrintDBUpdate(list->data + last, total);
+			PrintDBDelete(list->data + last, total);
+
+			last = i;
+
+			tabname = list->data[i].table_name;
+		}
+	}
+
+	total = i - last;
+
+	PrintDBInsert(list->data + last, total);
+	PrintDBUpdate(list->data + last, total);
+	PrintDBDelete(list->data + last, total);
 }
 
 void PrintJSONFunctions(metadata_list_t *list)
@@ -462,6 +593,7 @@ int main(int argc, char **argv)
 	PrintImplementationGuardStart();
 
 	PrintMetadataTable(&list);
+	PrintDBFunctions(&list);
 
 	PrintImplementationGuardEnd();
 

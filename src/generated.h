@@ -261,6 +261,108 @@ static db_meta metadata[] = {
 	{"tag","text","text",4,0,0}
 };
 
+// db_user_insert: handles 'insert' operations for the 'user' table
+int db_user_insert(user_t *item)
+{
+	sqlite3_stmt *stmt
+	char *sql
+	int rc;
+
+	sql = "insert into user (username, password, email, is_verified) values (?, ?, ?, ?);";
+
+	rc = sqlite3_prepare_v2(&db, sql, -1, &stmt, NULL);
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "couldn't prepare the sql statement!\n");
+	}
+
+	return 0;
+}
+
+// db_user_session_insert: handles 'insert' operations for the 'user_session' table
+int db_user_session_insert(user_session_t *item)
+{
+	sqlite3_stmt *stmt
+	char *sql
+	int rc;
+
+	sql = "insert into user_session (user_id, session_id, expires_ts) values (?, ?, ?);";
+
+	rc = sqlite3_prepare_v2(&db, sql, -1, &stmt, NULL);
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "couldn't prepare the sql statement!\n");
+	}
+
+	return 0;
+}
+
+// db_recipe_insert: handles 'insert' operations for the 'recipe' table
+int db_recipe_insert(recipe_t *item)
+{
+	sqlite3_stmt *stmt
+	char *sql
+	int rc;
+
+	sql = "insert into recipe (name, prep_time, cook_time, note) values (?, ?, ?, ?);";
+
+	rc = sqlite3_prepare_v2(&db, sql, -1, &stmt, NULL);
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "couldn't prepare the sql statement!\n");
+	}
+
+	return 0;
+}
+
+// db_ingredient_insert: handles 'insert' operations for the 'ingredient' table
+int db_ingredient_insert(ingredient_t *item)
+{
+	sqlite3_stmt *stmt
+	char *sql
+	int rc;
+
+	sql = "insert into ingredient (recipe_id, desc, sort) values (?, ?, ?);";
+
+	rc = sqlite3_prepare_v2(&db, sql, -1, &stmt, NULL);
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "couldn't prepare the sql statement!\n");
+	}
+
+	return 0;
+}
+
+// db_step_insert: handles 'insert' operations for the 'step' table
+int db_step_insert(step_t *item)
+{
+	sqlite3_stmt *stmt
+	char *sql
+	int rc;
+
+	sql = "insert into step (recipe_id, text, sort) values (?, ?, ?);";
+
+	rc = sqlite3_prepare_v2(&db, sql, -1, &stmt, NULL);
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "couldn't prepare the sql statement!\n");
+	}
+
+	return 0;
+}
+
+// db_tag_insert: handles 'insert' operations for the 'tag' table
+int db_tag_insert(tag_t *item)
+{
+	sqlite3_stmt *stmt
+	char *sql
+	int rc;
+
+	sql = "insert into tag (recipe_id, text) values (?, ?);";
+
+	rc = sqlite3_prepare_v2(&db, sql, -1, &stmt, NULL);
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "couldn't prepare the sql statement!\n");
+	}
+
+	return 0;
+}
+
 #endif // META_GEN_IMPLEMENTATION_H
 
 #endif // META_GEN_H

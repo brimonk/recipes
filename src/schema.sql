@@ -11,7 +11,7 @@ create table if not exists user
     , password   text not null
     , email      text not null
 
-    , is_verified int default (0)
+    , is_verified integer default (0)
 );
 
 create unique index if not exists idx_user_id on user(id);

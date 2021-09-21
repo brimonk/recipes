@@ -1,6 +1,6 @@
 CC=cc
 LINKER=-ldl -lpthread -lm -lmagic -lsodium
-CFLAGS=-fPIC -Wall -g3 -march=native
+CFLAGS=-DSQLITE_ENABLE_JSON1 -fPIC -Wall -g3 -march=native
 TARGET=./recipe
 
 SERV_SRC=src/recipe.c src/sqlite3.c
