@@ -95,6 +95,7 @@ int xctoi(char v);
 // USER FUNCTIONS
 
 #define USAGE ("USAGE: %s <dbname>\n")
+#define SCHEMA ("src/schema.sql")
 
 // handle_sigint: handles SIGINT so we can write to the database
 void handle_sigint(int sig)
@@ -113,7 +114,7 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	init(argv[1], "schema.sql");
+	init(argv[1], SCHEMA);
 
 	server = http_server_init(PORT, request_handler);
 
@@ -183,7 +184,6 @@ void request_handler(struct http_request_s *req)
 	if (0) {
 
     // user endpoints
-#if 0
     } else if (rcheck(req, "/api/v1/user/create", "POST")) {
         rc = user_api_newuser(req, res);
         CHKERR(503);
@@ -195,7 +195,6 @@ void request_handler(struct http_request_s *req)
 	} else if (rcheck(req, "/api/v1/user/logout", "POST")) {
 		rc = user_api_logout(req, res);
 		CHKERR(503);
-#endif
 
 	// static files, unrelated to main CRUD operations
 	} else if (rcheck(req, "/style.css", "GET")) {
@@ -601,6 +600,7 @@ void init(char *db_file_name, char *sql_file_name)
 
 	rc = create_tables(db, sql_file_name);
 	if (rc < 0) {
+		SQLITE_ERRMSG(rc);
 		ERR("Critical error in creating sql tables!!\n");
 		exit(1);
 	}
@@ -658,7 +658,6 @@ int create_tables(sqlite3 *db, char *fname)
 
 		if (rc != SQLITE_DONE) {
 			ERR("Couldn't Execute STMT : %s\n", sqlite3_errmsg(db));
-			return -1;
 		}
 
 		rc = sqlite3_finalize(stmt);

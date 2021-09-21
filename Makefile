@@ -3,7 +3,7 @@ LINKER=-ldl -lpthread -lm -lmagic -lsodium
 CFLAGS=-DSQLITE_ENABLE_JSON1 -fPIC -Wall -g3 -march=native
 TARGET=./recipe
 
-SERV_SRC=src/recipe.c src/sqlite3.c
+SERV_SRC=src/recipe.c src/user.c src/object.c src/sqlite3.c
 SERV_OBJ=$(SERV_SRC:.c=.o)
 SERV_DEP=$(SERV_SRC:.c=.d)
 

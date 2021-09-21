@@ -3,14 +3,132 @@
 
 const email_re = /^(([^<>()[\]\\.,;:\s@\"]+(\.[^<>()[\]\\.,;:\s@\"]+)*)|(\".+\"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;
 
-const COOKIE_DISCLAIMER = ` For legal reasons, you need to accept the fact that this site requires 1
+const COOKIE_DISCLAIMER = `For legal reasons, you need to accept the fact that this site requires 1
 session cookie for all operations where you might create new content.  It is impossible to opt-out
-of this cookie; however, you can still view recipes to your heart's content without using cookies.
-`;
+of this cookie; however, you can still view recipes to your heart's content without using cookies.`;
 
 // VError: a validation error constructor
 function VError(prop, msg) {
     return { prop: prop, msg: msg };
+}
+
+// H1: returns m("h1", text)
+function H1(text) {
+    return m("h1", text);
+}
+
+// H2: returns m("h2", text)
+function H2(text) {
+    return m("h2", text);
+}
+
+// H3: returns m("h3", text)
+function H3(text) {
+    return m("h3", text);
+}
+
+// H4: returns m("h4", text)
+function H4(text) {
+    return m("h4", text);
+}
+
+// DIV: returns m("div", arg)
+function DIV(arg) {
+    return m("div", arg);
+}
+
+// InputComponent: a little more complicated than the others
+function InputComponent(initialVnode) {
+    let object = initialVnode.attrs.object;
+    let prop = initialVnode.attrs.prop;
+    let type = initialVnode.attrs.type;
+
+    const types = [ "text", "number", "email" ];
+
+    if (!type) {
+        type = "text";
+    }
+
+    if (types.findIndex(x => x === type) < 0) {
+        throw new Error(`${type} not found in allowed types array: ${types}`);
+    }
+
+    return {
+        view: function(vnode) {
+            return m("input[autocomplete=off]", {
+                value: object[prop],
+                oninput: (e) => {
+                    if (type === "text") {
+                        object[prop] = e.target.value;
+                    } else if (type === "number") {
+                        object[prop] = e.target.value.replace(/\D/g, "");
+                    } else if (type === "email") {
+                        object[prop] = e.target.value.replace(/ /g, "");
+                    }
+                },
+            });
+        }
+    };
+}
+
+function TextAreaComponent(initialVnode) {
+    let object = initialVnode.attrs.object;
+    let prop = initialVnode.attrs.prop;
+    let maxlen = initialVnode.attrs.maxlen;
+
+    return {
+        view: function(vnode) {
+            return m("textarea", {
+                value: object[prop],
+                oninput: (e) => {
+                    object[prop] = e.target.value;
+                },
+            });
+        }
+    };
+}
+
+// ListComponent: a component that helps us manipulate and mangle lists
+function ListComponent(initialVnode) {
+    let list = initialVnode.attrs.list;
+
+    if (list.length === 0) {
+        list.push("");
+    }
+
+    const add_btn = m("button[type=button]", {
+        // add a new item at the end of the list
+        onclick: () => list.push("")
+    }, "+");
+
+    return {
+        view: function(vnode) {
+            const inputs = list.map((e, i, a) => {
+                const is_last = i === a.length - 1;
+
+                const input = m("input", {
+                    value: a[i],
+                    oninput: (e) => a[i] = e.target.value,
+                });
+
+                const sub_btn = m("button[type=button]", {
+                    onclick: () => list.splice(i, 1)
+                }, "-");
+
+                let controls = [ input ];
+
+                if (a.length > 1) {
+                    controls.push(sub_btn);
+                }
+
+                return m("div", controls);
+            });
+
+            let controls = [ inputs, add_btn ];
+
+            return m("div", controls);
+        }
+    };
 }
 
 // MenuComponent
@@ -19,7 +137,7 @@ function MenuComponent(initialVnode) {
         view: function(vnode) {
             return m("nav", [
                 m(m.route.Link, { href: "/" }, "Home"),
-                m(m.route.Link, { href: "/recipe" }, "New Recipe"),
+                m(m.route.Link, { href: "/recipe/new" }, "New Recipe"),
                 m(m.route.Link, { href: "/search" }, "Search"),
             ]);
         }
@@ -28,17 +146,50 @@ function MenuComponent(initialVnode) {
 
 // Recipe: the Recipe data structure
 class Recipe {
-    constructor() {
-        this.name = "";
+    constructor(id) {
+        this.id = id;
 
-        this.cook_time = -1;
-        this.prep_time = -1;
+        if (this.id) {
+            this.fetch();
+        } else {
+            this.name = "";
 
-        this.notes = "";
+            this.cook_time = null;
+            this.prep_time = null;
 
-        this.ingredients = [];
-        this.steps = [];
-        this.tags = [];
+            this.notes = "";
+
+            this.ingredients = [];
+            this.steps = [];
+            this.tags = [];
+        }
+    }
+
+    // fetch: fetches from the remote
+    fetch() {
+        return m.request({
+            method: "GET",
+            url: `/api/v1/recipe/${this.id}`,
+        }).then((x) => {
+            console.log(`got recipe, ${this.id}`);
+            console.log(x);
+
+            this.name = x.name;
+
+            this.cook_time = x.cook_time;
+            this.prep_time = x.prep_time;
+
+            this.notes = "";
+
+            this.ingredients = [];
+            this.steps = [];
+            this.tags = [];
+        }).catch((err) => {
+            console.error(err);
+        });
+    }
+
+    load(obj) {
     }
 
     // isValid: returns true if the object is valid for upserting
@@ -47,14 +198,58 @@ class Recipe {
     }
 }
 
-// RecipeComponent
+// RecipeComponent: Handles Recipe CRUD Operations
 function RecipeComponent(initialVnode) {
+    let id = m.route.param("id");
+    let recipe = new Recipe(id);
+
     return {
         view: function(vnode) {
+            // testing just with the name
+            let name_ctrl = m(InputComponent, {
+                object: recipe, prop: "name",
+            });
+
+            let cook_time_ctrl = m(InputComponent, {
+                object: recipe, prop: "cook_time", type: "number",
+            });
+
+            let prep_time_ctrl = m(InputComponent, {
+                object: recipe, prop: "prep_time", type: "number",
+            });
+
+            let notes_ctrl = m(TextAreaComponent, {
+                object: recipe, prop: "notes",
+            });
+
+            let ingredients_ctrl = m(ListComponent, { list: recipe.ingredients });
+
+            let steps_ctrl = m(ListComponent, { list: recipe.steps });
+
+            let tags_ctrl = m(ListComponent, { list: recipe.tags });
+
+            let log_button = m("button[type=button]", {
+                onclick: (e) => console.log(recipe)
+            }, "Dump Object State");
 
             return [
                 m(MenuComponent),
-                m("h3", "Recipe Page"),
+
+                H3("Recipe Page"),
+
+                H3(id ? recipe.name : "New Recipe"),
+
+                DIV([
+                    H4("Name"), name_ctrl,
+                    H4("Cook Time"), cook_time_ctrl,
+                    H4("Prep Time"), prep_time_ctrl,
+                    H4("Ingredients"), ingredients_ctrl,
+                    H4("Steps"), steps_ctrl,
+                    H4("Tags"), tags_ctrl,
+                    H4("Notes"), notes_ctrl,
+
+                    log_button
+                ]),
             ];
         }
     }
@@ -415,6 +610,7 @@ const routes = {
     "/newuser": NewUserComponent,
     "/search": SearchComponent,
     "/login": LoginComponent,
+    "/recipe/new": RecipeComponent,
     "/recipe/:id": RecipeComponent,
 };
 
