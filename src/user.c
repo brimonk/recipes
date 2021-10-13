@@ -9,7 +9,6 @@
 #include <assert.h>
 
 #include "httpserver.h"
-#include "sqlite3.h"
 
 #include <sodium.h>
 
@@ -19,6 +18,8 @@
 #include "object.h"
 
 #define COOKIE_KEY ("session")
+
+#if 0
 
 extern sqlite3 *db;
 
@@ -538,4 +539,6 @@ void user_free(struct User *user)
         free(user);
     }
 }
+
+#endif
 

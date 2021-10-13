@@ -4,26 +4,25 @@
 #define COMMON_IMPLEMENTATION
 #include "common.h"
 
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+
+#include <sys/mman.h>
+
 #define HTTPSERVER_IMPL
 #include "httpserver.h"
-
-#include "sqlite3.h"
 
 #include <magic.h>
 #include <sodium.h>
 
-#include "user.h"
-#include "object.h"
-
-#include "generated.h"
+#include "objects.h"
 
 #define PORT (2000)
 
 // STATIC STUFF
 
 static magic_t MAGIC_COOKIE;
-
-sqlite3 *db;
 
 // APPLICATION DATA STRUCTURES HERE
 struct search {
@@ -34,30 +33,13 @@ struct search {
     size_t size;
 };
 
-struct recipe {
-    char *name;
-
-    int cook_time;
-    int prep_time;
-    int servings;
-
-    char *notes;
-
-    char **ingredients;
-    char **steps;
-    char **tags;
-};
-
 // APPLICATION FUNCTIONS HERE
 
 // init: initializes the program
-void init(char *db_file_name, char *sql_file_name);
+void init(char *fname);
 
 // cleanup: cleans up resources open so we can elegantly close the program
 void cleanup(void);
-
-// create_tables: execs create * statements on the database
-int create_tables(sqlite3 *db, char *fname);
 
 // is_uuid: returns true if the input string is a uuid
 int is_uuid(char *id);
@@ -92,7 +74,7 @@ int get_codepoint(char *s);
 // xctoi: converts a hex char (ascii) to the corresponding integer value
 int xctoi(char v);
 
-// USER FUNCTIONS
+handle_t handle;
 
 #define USAGE ("USAGE: %s <dbname>\n")
 #define SCHEMA ("src/schema.sql")
@@ -100,7 +82,6 @@ int xctoi(char v);
 // handle_sigint: handles SIGINT so we can write to the database
 void handle_sigint(int sig)
 {
-	sqlite3_close(db);
 	printf("\n");
 	exit(1);
 }
@@ -114,7 +95,7 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	init(argv[1], SCHEMA);
+	init(argv[1]);
 
 	server = http_server_init(PORT, request_handler);
 
@@ -183,6 +164,7 @@ void request_handler(struct http_request_s *req)
 
 	if (0) {
 
+#if 0
     // user endpoints
     } else if (rcheck(req, "/api/v1/user/create", "POST")) {
         rc = user_api_newuser(req, res);
@@ -200,6 +182,7 @@ void request_handler(struct http_request_s *req)
 	} else if (rcheck(req, "/style.css", "GET")) {
 		rc = send_file(req, res, "html/style.css");
         CHKERR(503);
+#endif
 
 	} else if (rcheck(req, "/", "GET") || rcheck(req, "/index.html", "GET")) {
 		rc = send_file(req, res, "html/index.html");
@@ -560,10 +543,11 @@ int xctoi(char v)
 	}
 }
 
-// init: initializes the program
-void init(char *db_file_name, char *sql_file_name)
+// init : initializes the program
+void init(char *fname)
 {
 	int rc;
+	struct stat st;
 
 	// seed the rng machine if it hasn't been
 	pcg_seed(&localrand, time(NULL) ^ (long)printf, (unsigned long)init);
@@ -580,93 +564,122 @@ void init(char *db_file_name, char *sql_file_name)
 		magic_close(MAGIC_COOKIE);
 	}
 
-	rc = sqlite3_open(db_file_name, &db);
-	if (rc != SQLITE_OK) {
-		SQLITE_ERRMSG(rc);
-		exit(1);
-	}
-
-	sqlite3_db_config(db,SQLITE_DBCONFIG_ENABLE_LOAD_EXTENSION, 1, NULL);
-	if (rc != SQLITE_OK) {
-		SQLITE_ERRMSG(rc);
-		exit(1);
-	}
-
-	rc = sqlite3_load_extension(db, "./ext_uuid.so", "sqlite3_uuid_init", NULL);
-	if (rc != SQLITE_OK) {
-		SQLITE_ERRMSG(rc);
-		exit(1);
-	}
-
-	rc = create_tables(db, sql_file_name);
-	if (rc < 0) {
-		SQLITE_ERRMSG(rc);
-		ERR("Critical error in creating sql tables!!\n");
-		exit(1);
-	}
-
     rc = sodium_init();
     if (rc < 0) {
         ERR("Couldn't initialize libsodium!\n");
         exit(1);
     }
 
-#if 0
-	char *err;
-#define SQL_WAL_ENABLE ("PRAGMA journal_mode=WAL;")
-	char *err;
-	rc = sqlite3_exec(db, SQL_WAL_ENABLE, NULL, NULL, (char **)&err);
-	if (rc != SQLITE_OK) {
-		SQLITE_ERRMSG(rc);
+	memset(&handle, 0, sizeof handle);
+
+	handle.fd = open(fname, O_CREAT | O_RDWR, 0666);
+
+	if (handle.fd < 0) {
+		fprintf(stderr, "couldn't open file '%s'\n", fname);
+		perror("open");
 		exit(1);
 	}
-#endif
+
+	stat(fname, &st);
+
+	if (st.st_size == 0) {
+		setup_store();
+	}
+
+	load_from_store();
 }
 
-// cleanup: cleans up for a shutdown (probably doesn't ever happen)
+// cleanup : cleans up for a shutdown (probably doesn't ever happen)
 void cleanup(void)
 {
-	sqlite3_close(db);
-}
-
-// create_tables: bootstraps the database (and the rest of the app)
-int create_tables(sqlite3 *db, char *fname)
-{
-	sqlite3_stmt *stmt;
-	char *sql, *s;
 	int rc;
 
-	sql = sys_readfile(fname, NULL);
-	if (sql == NULL) {
-		return -1;
+	sync_to_store();
+
+	munmap(handle.ptr, ((storeheader_t *)handle.ptr)->size);
+
+	if (handle.fd >= 0) {
+		close(handle.fd);
+	}
+}
+
+// NOTE (Brian):
+//
+// We actually might want to implement something where we just serialize
+// to the lump system every nowandagain, and we instead just have arrays that we
+// can realloc and whatnot.
+
+// setup_store : sets up storage
+int setup_store(void)
+{
+	storeheader_t header;
+	size_t sz;
+	int rc;
+
+	header.header = OBJECT_MAGIC;
+	header.version = OBJECT_VERSION;
+
+	sz = 0x1000;
+	sz += DEFAULT_RECORD_CNT * sizeof(user_t);
+	sz += DEFAULT_RECORD_CNT * sizeof(recipe_t);
+
+	header.size = sz;
+
+	header.lumps[RT_USER].type = RT_USER;
+	header.lumps[RT_USER].size = sizeof(user_t);
+	header.lumps[RT_USER].cnt = DEFAULT_RECORD_CNT;
+	header.lumps[RT_USER].len = 0;
+	header.lumps[RT_USER].start = 0x1000;
+
+	header.lumps[RT_RECIPE].type = RT_RECIPE;
+	header.lumps[RT_RECIPE].size = sizeof(recipe_t);
+	header.lumps[RT_RECIPE].cnt = DEFAULT_RECORD_CNT;
+	header.lumps[RT_RECIPE].len = 0;
+	header.lumps[RT_RECIPE].start = // yikes
+		header.lumps[RT_RECIPE - 1].start
+			+ header.lumps[RT_RECIPE - 1].size * header.lumps[RT_RECIPE - 1].cnt;
+
+	rc = ftruncate(handle.fd, sz);
+	if (rc < 0) {
+		fprintf(stderr, "couldn't setup the storage!\n");
+		exit(1);
 	}
 
-	for (s = sql; *s;) {
-		rc = sqlite3_prepare_v2(db, s, -1, &stmt, (const char **)&s);
-		if (rc != SQLITE_OK) {
-			ERR("Couldn't Prepare STMT : %s\n", sqlite3_errmsg(db));
-			return -1;
-		}
+	handle.size = sz;
 
-		rc = sqlite3_step(stmt);
+	handle.ptr = mmap(NULL, sz, PROT_READ | PROT_WRITE, MAP_SHARED, handle.fd, 0);
 
-		//  TODO (brian): goofy hack, ensure that this can really just run
-		//  all of our bootstrapping things we'd ever need
-		if (rc == SQLITE_MISUSE) {
-			continue;
-		}
+	close(handle.fd);
+	handle.fd = -1;
 
-		if (rc != SQLITE_DONE) {
-			ERR("Couldn't Execute STMT : %s\n", sqlite3_errmsg(db));
-		}
+	memcpy(handle.ptr, &header, sizeof header);
 
-		rc = sqlite3_finalize(stmt);
-		if (rc != SQLITE_OK) {
-			ERR("Couldn't Finalize STMT : %s\n", sqlite3_errmsg(db));
-			return -1;
-		}
-	}
+	// test
 
+	user_t *user;
+
+	user = (void *)((unsigned char *)handle.ptr) + header.lumps[RT_USER].start;
+
+	strncpy((char *)user->username, "Brian Chrzanowski", sizeof(user->username));
+
+	msync(handle.ptr, sz, MS_ASYNC);
+
+	return 0;
+}
+
+// load_from_store : setup our memory mapped storage
+int load_from_store(void)
+{
+	return 0;
+}
+
+int sync_to_store(void)
+{
+	return 0;
+}
+
+int grow_store(void)
+{
 	return 0;
 }
 

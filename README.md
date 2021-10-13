@@ -38,6 +38,10 @@ curl "https://unpkg.com/mithril/mithril.js" > html/mithril.js
 
 ## WIP
 
+### Storage
+
+Basically, I'm interested in saying, "fuck databases" again, so let's try to make that happen.
+
 ### In Progress
 
 ### To Do (Features)
