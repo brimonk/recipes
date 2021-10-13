@@ -48,5 +48,6 @@ clean:
 	rm -f $(ALL_OBJ)
 	rm -f $(ALL_DEP)
 	rm -f $(TARGET) ext_uuid.so
+	rm -f ./meta
 	rm -f html/ui.js
 
