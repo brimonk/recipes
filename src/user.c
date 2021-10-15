@@ -3,25 +3,16 @@
 //
 // User Functions
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <assert.h>
+#include "common.h"
 
 #include "httpserver.h"
 
 #include <sodium.h>
 
-#include "common.h"
-
 #include "user.h"
-#include "object.h"
+#include "objects.h"
 
 #define COOKIE_KEY ("session")
-
-#if 0
-
-extern sqlite3 *db;
 
 // user_api_newuser: endpoint, /api/v1/user/create
 int user_api_newuser(struct http_request_s *req, struct http_response_s *res)
@@ -168,29 +159,7 @@ int user_api_logout(struct http_request_s *req, struct http_response_s *res)
 // user_logout: logs the user out
 int user_logout(char *secret)
 {
-	sqlite3_stmt *stmt;
-	char *sql;
-	int rc;
-
-	sql = "delete from user_session where session_id = ?;";
-
-	rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
-	if (rc != SQLITE_OK) {
-		SQLITE_ERRMSG(rc);
-		sqlite3_finalize(stmt);
-		return -1;
-	}
-
-	sqlite3_bind_text(stmt, 1, secret, -1, NULL);
-
-	rc = sqlite3_step(stmt);
-	if (rc != SQLITE_DONE) {
-		ERR("could not delete user_session record!");
-		sqlite3_finalize(stmt);
-		return -1;
-	}
-
-	sqlite3_finalize(stmt);
+	// TODO (Brian): replace user logout functionality
 
     return 0;
 }
@@ -198,36 +167,7 @@ int user_logout(char *secret)
 // user_login: generates the secret, inserts into the session table
 int user_login(struct User *user)
 {
-    sqlite3_stmt *stmt;
-    char *sql;
-    int rc;
-
-    sql =
-"insert into user_session (user_id, session_id) values "
-"((select id from user where username = ?), ?) "
-"on conflict (user_id) do update set "
-"expires_ts = (strftime('%Y-%m-%dT%H:%M:%S', 'now', '+7 days')), "
-"session_id = excluded.session_id;";
-
-    rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
-    if (rc != SQLITE_OK) {
-        SQLITE_ERRMSG(rc);
-		sqlite3_finalize(stmt);
-		return -1;
-    }
-
-	sqlite3_bind_text(stmt, 1, user->username, -1, NULL);
-	sqlite3_bind_text(stmt, 2, user->secret, -1, NULL);
-
-	rc = sqlite3_step(stmt);
-
-	if (rc != SQLITE_DONE) {
-		ERR("could not upsert the session record!");
-		sqlite3_finalize(stmt);
-		return -1;
-	}
-
-	sqlite3_finalize(stmt);
+	// TODO (Brian): replace user login functionality
 
 	return 0;
 }
@@ -235,6 +175,7 @@ int user_login(struct User *user)
 // user_haspass: return true if the user in this object is legit (has the pass)
 int user_haspass(struct User *user)
 {
+#if 0
 	sqlite3_stmt *stmt;
 	char *sql;
 	char *hash;
@@ -264,12 +205,15 @@ int user_haspass(struct User *user)
 
 	free(hash);
 
+#endif
+
 	return 0;
 }
 
 // user_makehash: hashes the password
 int user_makehash(struct User *user)
 {
+#if 0
 	int rc;
     char hash[crypto_pwhash_STRBYTES];
 
@@ -279,6 +223,7 @@ int user_makehash(struct User *user)
 	}
 
 	user->hash = strdup(hash);
+#endif
 
 	return 0;
 }
@@ -286,6 +231,7 @@ int user_makehash(struct User *user)
 // user_insert: handles the inserting of a user
 int user_insert(struct User *user)
 {
+#if 0
     sqlite3_stmt *stmt;
     char hash[crypto_pwhash_STRBYTES];
     char *sql;
@@ -314,6 +260,7 @@ int user_insert(struct User *user)
     }
 
     sqlite3_finalize(stmt);
+#endif
 
     return 0;
 }
@@ -321,6 +268,7 @@ int user_insert(struct User *user)
 // user_makesecret: generates a secret for the user
 int user_makesecret(struct User *user)
 {
+#if 0
     unsigned char session_id[32];
     char session_base64[128];
     s32 variant;
@@ -338,6 +286,7 @@ int user_makesecret(struct User *user)
 	sodium_bin2base64(session_base64, sizeof session_base64, session_id, sizeof session_id, variant);
 
 	user->secret = strndup(session_base64, sizeof session_base64);
+#endif
 
 	return 0;
 }
@@ -345,6 +294,7 @@ int user_makesecret(struct User *user)
 // user_getsecret: fetches the user's secret from the database, based on username
 int user_getsecret(struct User *user)
 {
+#if 0
 	sqlite3_stmt *stmt;
 	char *sql;
 	int rc;
@@ -365,6 +315,7 @@ int user_getsecret(struct User *user)
 	user->secret = strdup((char *)sqlite3_column_text(stmt, 0));
 
 	sqlite3_finalize(stmt);
+#endif
 
 	return 0;
 }
@@ -482,6 +433,8 @@ struct User *user_from_session(struct http_request_s *req)
 struct User *user_from_json(char *s, size_t len)
 {
     struct User *user;
+
+#if 0
     struct object *object;
 
     object = object_from_json(s, len);
@@ -502,6 +455,7 @@ struct User *user_from_json(char *s, size_t len)
     user->email = object_gs(object, ".email");
 
     object_free(object);
+#endif
 
     return user;
 }
@@ -509,22 +463,7 @@ struct User *user_from_json(char *s, size_t len)
 // user_to_json: converts a user object to json
 char *user_to_json(struct User *user)
 {
-	char *s;
-	char *fmt;
-	size_t ssize;
-
-	// NOTE (Brian): Pretty reasonable decision to never send the password
-	// or hash to a user, over the wire.
-
-	fmt = "{\"username\":\"%s\",\"email\":\"%s\",\"secret\":\"%s\"}";
-
-	ssize = snprintf(NULL, 0, fmt, user->username, user->email, user->secret);
-
-	s = calloc(ssize, sizeof(*s));
-
-	snprintf(s, ssize, fmt, user->username, user->email, user->secret);
-
-	return s;
+	return NULL;
 }
 
 // user_free: frees the user object
@@ -539,6 +478,4 @@ void user_free(struct User *user)
         free(user);
     }
 }
-
-#endif
 

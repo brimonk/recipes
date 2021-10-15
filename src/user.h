@@ -6,7 +6,7 @@
 
 #include "httpserver.h"
 
-#include "object.h"
+#include "objects.h"
 
 enum {
 	USER_CONTEXT_NONE,

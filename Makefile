@@ -1,9 +1,9 @@
 CC=cc
-LINKER=-ldl -lpthread -lm -lmagic -lsodium -lasan
+LINKER=-ldl -lpthread -lm -lmagic -lsodium
 CFLAGS=-fPIC -Wall -g3 -march=native
 TARGET=./recipe
 
-SRC=src/recipe.c src/user.c src/object.c
+SRC=$(wildcard src/*.c)
 OBJ=$(SRC:.c=.o)
 DEP=$(SRC:.c=.d)
 
