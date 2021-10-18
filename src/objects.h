@@ -14,6 +14,8 @@
 #define OBJECT_FLAG_VERIFIED       (0x0004)
 #define OBJECT_FLAG_PUBLISHED      (0x0008)
 
+typedef char string_char;
+
 // objectbase_t : stores just the object's id, and some flags
 typedef struct objectbase_t {
 	u64 id;
@@ -23,7 +25,7 @@ typedef struct objectbase_t {
 // string_128_t : a 128 char string
 typedef struct string_128_t {
 	objectbase_t base;
-	char string[128];
+	string_char string[128];
 } string_128_t;
 
 typedef u64 string_128_id;
@@ -31,7 +33,7 @@ typedef u64 string_128_id;
 // string_256_t : a 256 char string
 typedef struct string_256_t {
 	objectbase_t base;
-	char string[256];
+	string_char string[256];
 } string_256_t;
 
 typedef u64 string_256_id;
@@ -39,7 +41,6 @@ typedef u64 string_256_id;
 // user_t : user struct
 typedef struct user_t {
 	objectbase_t base;
-
 	string_128_id username;
 	string_128_id email;
 	string_128_id password;
@@ -49,13 +50,31 @@ typedef struct user_t {
 
 typedef u64 user_id;
 
-// tag_t : tag struct
+// recipe_id : the pk for a recipe item (just a u64 that's the array offset)
+typedef u64 recipe_id;
+
+// ingredient_t : a single ingredient (it's just a double pointer)
+typedef struct ingredient_t {
+	objectbase_t base;
+	recipe_id recipe_id;
+	string_128_id string_id;
+} ingredient_t;
+
+typedef u64 ingredient_id;
+
+// step_t : a single step for a recipe
+typedef struct step_t {
+	objectbase_t base;
+	recipe_id recipe_id;
+	string_128_id string_id;
+} step_t;
+
+// tag_t : a single tag in the system (it's just a double pointer)
 typedef struct tag_t {
 	objectbase_t base;
-	string_128_t string_id;
+	recipe_id recipe_id;
+	string_128_id string_id;
 } tag_t;
-
-typedef u64 recipe_id;
 
 // recipe_t : recipe struct
 typedef struct recipe_t {
@@ -63,13 +82,13 @@ typedef struct recipe_t {
 
 	user_id user_id;
 
-	int cook_time;
+	string_128_id name_id;
+
 	int prep_time;
+	int cook_time;
 	int servings;
 
-	string_128_t ingredients[128];
-	string_128_t steps[128];
-	string_128_t tags[64];
+	// ingredients, steps, and tags are "joined" to this record on "recipe_id"
 
 	string_256_id note_id;
 } recipe_t;
@@ -83,6 +102,8 @@ typedef struct recipe_t {
 typedef enum RECORD_TYPE {
 	RT_USER,
 	RT_RECIPE,
+	RT_STEP,
+	RT_INGREDIENT,
 	RT_TAG,
 	RT_STRING128,
 	RT_STRING256,

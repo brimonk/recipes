@@ -75,7 +75,8 @@ function InputComponent(initialVnode) {
                     if (type === "text") {
                         object[prop] = e.target.value;
                     } else if (type === "number") {
-                        object[prop] = e.target.value.replace(/\D/g, "");
+                        const strval = e.target.value.replace(/\D/g, "");
+                        object[prop] = parseInt(strval);
                     } else if (type === "email") {
                         object[prop] = e.target.value.replace(/ /g, "");
                     }
@@ -194,7 +195,7 @@ class Recipe {
             this.cook_time = null;
             this.prep_time = null;
 
-            this.notes = "";
+            this.note = "";
 
             this.ingredients = [];
             this.steps = [];
@@ -202,7 +203,7 @@ class Recipe {
         }
     }
 
-    // fetch: fetches from the remote
+    // fetch : fetches from the remote
     fetch() {
         return m.request({
             method: "GET",
@@ -216,7 +217,7 @@ class Recipe {
             this.cook_time = x.cook_time;
             this.prep_time = x.prep_time;
 
-            this.notes = "";
+            this.note = "";
 
             this.ingredients = [];
             this.steps = [];
@@ -229,18 +230,31 @@ class Recipe {
     load(obj) {
     }
 
-    // isValid: returns true if the object is valid for upserting
+    // isValid : returns true if the object is valid for upserting
     isValid() {
+        // NOTE (Brian): we need to perform UI input checking
         return true;
     }
 
+    // submit : attempts to submit the current object to the backend
     submit() {
-        if (!isValid) {
+        if (this.isValid()) {
+            m.request({
+                method: "POST",
+                url: `/api/v1/recipe`,
+                body: this
+            }).then((x) => {
+                console.log(x);
+            }).catch((err) => {
+                console.error(err);
+            });
+        } else {
+            console.error("this is invalid!");
         }
     }
 }
 
-// RecipeComponent: Handles Recipe CRUD Operations
+// RecipeComponent : Handles Recipe CRUD Operations
 function RecipeComponent(initialVnode) {
     let id = m.route.param("id");
     let recipe = new Recipe(id);
@@ -260,8 +274,12 @@ function RecipeComponent(initialVnode) {
                 object: recipe, prop: "prep_time", type: "number",
             });
 
+            let servings_ctrl = m(InputComponent, {
+                object: recipe, prop: "servings", type: "number",
+            });
+
             let notes_ctrl = m(TextAreaComponent, {
-                object: recipe, prop: "notes", rows: 15, cols: 100
+                object: recipe, prop: "note", rows: 15, cols: 100
             });
 
             let ingredients_ctrl = m(ListComponent, {
@@ -291,6 +309,7 @@ function RecipeComponent(initialVnode) {
                     H4("Name"), name_ctrl,
                     H4("Cook Time"), cook_time_ctrl,
                     H4("Prep Time"), prep_time_ctrl,
+                    H4("Servings"), servings_ctrl,
                     H4("Ingredients"), ingredients_ctrl,
                     H4("Steps"), steps_ctrl,
                     H4("Tags"), tags_ctrl,

@@ -8,9 +8,30 @@
 #include "httpserver.h"
 
 #include <sodium.h>
+#include <math.h>
+#include "cJSON.h"
 
-#include "user.h"
+#include "recipe.h"
 #include "objects.h"
+#include "store.h"
+
+// recipe_free : frees all of the data in the recipe object
+void recipe_free(struct Recipe *recipe);
+
+// recipe_add : adds a recipe to the backing store
+s64 recipe_add(struct Recipe *recipe);
+
+// recipe_get : fetches a recipe object from the store, and parses it
+struct Recipe *recipe_get(s64 id);
+
+// recipe_update : updates the recipe at id 'id', with 'recipe''s data
+s64 recipe_update(s64 id, struct Recipe *recipe);
+
+// recipe_delete : marks the recipe at 'id', as unallocated
+s64 recipe_delete(s64 id);
+
+// recipe_validation : returns non-zero if the input object is invalid
+int recipe_validation(struct Recipe *recipe);
 
 // from_json : converts a JSON string into a Recipe
 static struct Recipe *from_json(char *s);
@@ -21,24 +42,145 @@ static char *to_json(struct Recipe *recipe);
 // recipe_api_post : endpoint, POST - /api/v1/recipe
 int recipe_api_post(struct http_request_s *req, struct http_response_s *res)
 {
+	recipe_id id;
+	struct Recipe *recipe;
+	struct http_string_s body;
+	char *json;
+	char tbuf[BUFLARGE];
+
+	body = http_request_body(req);
+
+	json = strndup(body.buf, body.len);
+	if (json == NULL) {
+		// return http error
+		return -1;
+	}
+
+	recipe = from_json(json);
+
+	free(json);
+
+	if (recipe == NULL) {
+		ERR("couldn't parse recipe from json!\n");
+		return -1;
+	}
+
+	if (recipe_validation(recipe) < 0) {
+		ERR("recipe record invalid!\n");
+		return -1;
+	}
+
+	id = recipe_add(recipe);
+	if (id < 0) {
+		ERR("couldn't save the recipe to the disk!\n");
+		return -1;
+	}
+
+	snprintf(tbuf, sizeof tbuf, "{\"id\":%lld}", id);
+
+	// fill out response information
+	http_response_status(res, 200);
+
+	http_response_body(res, tbuf, strlen(tbuf));
+
+	http_respond(req, res);
+
 	return 0;
 }
 
 // recipe_api_put : endpoint, PUT - /api/v1/recipe/{id}
 int recipe_api_put(struct http_request_s *req, struct http_response_s *res)
 {
+	recipe_id id;
+	struct Recipe *recipe;
+	struct http_string_s body;
+	char *json;
+
+	body = http_request_body(req);
+
+	json = strndup(body.buf, body.len);
+	if (json == NULL) {
+		// return http error
+		return -1;
+	}
+
+	recipe = from_json(json);
+
+	free(json);
+
+	if (recipe == NULL) {
+		ERR("couldn't parse recipe from json!\n");
+		return -1;
+	}
+
+	if (recipe_validation(recipe) < 0) {
+		ERR("recipe record invalid!\n");
+		return -1;
+	}
+
+#if 0
+	id = recipe_update(recipe);
+	if (id == 0) {
+		ERR("couldn't save the recipe to the disk!\n");
+		return -1;
+	}
+#endif
+
+	// fill out response information
+	http_response_status(res, 200);
+
 	return 0;
 }
 
 // recipe_api_get : endpoint, GET - /api/v1/recipe/{id}
 int recipe_api_get(struct http_request_s *req, struct http_response_s *res)
 {
+	recipe_id id;
+	struct Recipe *recipe;
+	struct http_string_s body;
+	char *json;
+
+	body = http_request_body(req);
+
+	json = strndup(body.buf, body.len);
+	if (json == NULL) {
+		// return http error
+		return -1;
+	}
+
+	recipe = from_json(json);
+
+	free(json);
+
+	if (recipe == NULL) {
+		ERR("couldn't parse recipe from json!\n");
+		return -1;
+	}
+
+	if (recipe_validation(recipe) < 0) {
+		ERR("recipe record invalid!\n");
+		return -1;
+	}
+
+	// NOTE (Brian): this has to be the id of the recipe
+	// recipe = recipe_get(recipe);
+	recipe = recipe_get(0);
+	if (recipe == NULL) {
+		ERR("couldn't save the recipe to the disk!\n");
+		return -1;
+	}
+
+	// fill out response information
+	http_response_status(res, 200);
+
 	return 0;
+
 }
 
 // recipe_api_delete : endpoint, DELETE - /api/v1/recipe/{id}
 int recipe_api_delete(struct http_request_s *req, struct http_response_s *res)
 {
+	// parse out the recipe delete id, and mark it as deleted
 	return 0;
 }
 
@@ -48,17 +190,384 @@ int recipe_api_getlist(struct http_request_s *req, struct http_response_s *res)
 	return 0;
 }
 
+// recipe_add : adds a recipe to the backing store
+s64 recipe_add(struct Recipe *recipe)
+{
+	recipe_t *record;
+
+	ingredient_t *ingredient;
+	step_t *step;
+	tag_t *tag;
+
+	string_128_t *string128;
+	string_256_t *string256;
+
+	size_t i;
+
+	record = store_addobj(RT_RECIPE);
+
+#if 0
+	record->user_id = recipe->user_id;
+#endif
+
+	record->prep_time = recipe->prep_time;
+	record->cook_time = recipe->cook_time;
+	record->servings = recipe->servings;
+
+	string128 = store_addobj(RT_STRING128);
+	strncpy(string128->string, recipe->name, sizeof(string128->string));
+	record->name_id = string128->base.id;
+
+	string256 = store_addobj(RT_STRING256);
+	strncpy(string256->string, recipe->note, sizeof(string256->string));
+	record->note_id = string256->base.id;
+
+	if (recipe->note != NULL) {
+		strncpy(string256->string, recipe->note, sizeof(string256->string));
+	}
+
+	for (i = 0; i < recipe->ingredients_len; i++) {
+		string128 = store_addobj(RT_STRING128);
+		strncpy(string128->string, recipe->ingredients[i], sizeof(string128->string));
+
+		ingredient = store_addobj(RT_INGREDIENT);
+
+		ingredient->string_id = string128->base.id;
+		ingredient->recipe_id = record->base.id;
+	}
+
+	for (i = 0; i < recipe->steps_len; i++) {
+		string128 = store_addobj(RT_STRING128);
+		strncpy(string128->string, recipe->steps[i], sizeof(string128->string));
+
+		step = store_addobj(RT_STEP);
+
+		step->string_id = string128->base.id;
+		step->recipe_id = record->base.id;
+	}
+
+	for (i = 0; i < recipe->tags_len; i++) {
+		string128 = store_addobj(RT_STRING128);
+		strncpy(string128->string, recipe->tags[i], sizeof(string128->string));
+
+		tag = store_addobj(RT_TAG);
+
+		tag->string_id = string128->base.id;
+		tag->recipe_id = record->base.id;
+	}
+
+	store_write();
+
+	return record->base.id;
+}
+
+// recipe_update : updates the recipe at id 'id', with 'recipe''s data
+s64 recipe_update(s64 id, struct Recipe *recipe)
+{
+	return 0;
+}
+
+// recipe_delete : marks the recipe at 'id', as unallocated
+s64 recipe_delete(s64 id)
+{
+	// NOTE (Brian): deleting any objects in the system is SUPER easy. You just scan across the
+	// table, and you mark those slots as free.
+
+	size_t i, len;
+	recipe_t *recipe;
+
+	recipe = store_getobj(RT_RECIPE, id);
+	if (recipe == NULL) {
+		return -1;
+	}
+
+	for (i = 0, len = store_getlen(RT_INGREDIENT); i < len; i++) {
+		ingredient_t *ingredient;
+		ingredient = store_getobj(RT_INGREDIENT, i);
+		if (recipe->base.id == ingredient->base.id) {
+			store_freeobj(RT_INGREDIENT, i);
+		}
+	}
+
+	for (i = 0, len = store_getlen(RT_STEP); i < len; i++) {
+		step_t *step;
+		step = store_getobj(RT_STEP, i);
+		if (recipe->base.id == step->base.id) {
+			store_freeobj(RT_STEP, i);
+		}
+	}
+
+	for (i = 0, len = store_getlen(RT_TAG); i < len; i++) {
+		tag_t *tag;
+		tag = store_getobj(RT_TAG, i);
+		if (recipe->base.id == tag->base.id) {
+			store_freeobj(RT_TAG, i);
+		}
+	}
+
+	store_freeobj(RT_STRING128, recipe->name_id);
+	store_freeobj(RT_STRING256, recipe->note_id);
+
+	store_freeobj(RT_RECIPE, id);
+
+	return 0;
+}
+
+// recipe_get : fetches a recipe object from the store, and parses it
+struct Recipe *recipe_get(s64 id)
+{
+	return NULL;
+}
+
+// recipe_validation : returns non-zero if the input object is invalid
+int recipe_validation(struct Recipe *recipe)
+{
+	size_t i;
+
+	if (recipe == NULL) {
+		return -1;
+	}
+
+	if (recipe->name == NULL || 128 < strlen(recipe->name)) {
+		return -1;
+	}
+
+	if (recipe->prep_time <= 0) {
+		return -1;
+	}
+
+	if (recipe->cook_time <= 0) {
+		return -1;
+	}
+
+	if (recipe->servings <= 0) {
+		return -1;
+	}
+
+	if (ARRSIZE(recipe->ingredients) < recipe->ingredients_len) {
+		return -1;
+	}
+	for (i = 0; i < recipe->ingredients_len; i++) {
+		if (128 < strlen(recipe->ingredients[i])) {
+			return -1;
+		}
+	}
+
+	if (ARRSIZE(recipe->steps) < recipe->steps_len) {
+		return -1;
+	}
+	for (i = 0; i < recipe->steps_len; i++) {
+		if (128 < strlen(recipe->steps[i])) {
+			return -1;
+		}
+	}
+
+	if (ARRSIZE(recipe->tags) < recipe->tags_len) {
+		return -1;
+	}
+	for (i = 0; i < recipe->tags_len; i++) {
+		if (128 < strlen(recipe->tags[i])) {
+			return -1;
+		}
+	}
+
+	return 0;
+}
+
 // from_json : converts a JSON string into a Recipe
 static struct Recipe *from_json(char *s)
 {
-	struct Recipe *recipe = NULL;
+	struct Recipe *recipe;
+	cJSON *json;
+
+	cJSON *id;
+	cJSON *name;
+	cJSON *servings;
+	cJSON *prep_time;
+	cJSON *cook_time;
+	cJSON *note;
+
+	cJSON *ingredients;
+	cJSON *ingredient;
+
+	cJSON *steps;
+	cJSON *step;
+
+	cJSON *tags;
+	cJSON *tag;
+
+	size_t i;
+
+	recipe = NULL;
+	json = NULL;
+
+	recipe = calloc(1, sizeof(*recipe));
+	if (recipe == NULL) {
+		goto bail;
+	}
+
+	json = cJSON_Parse(s);
+	if (json == NULL) {
+		goto bail;
+	}
+
+	id = cJSON_GetObjectItemCaseSensitive(json, "id");
+	if (cJSON_IsNumber(id)) {
+		recipe->id = (s64)cJSON_GetNumberValue(id);
+	} else {
+		recipe->id = -1;
+	}
+
+	name = cJSON_GetObjectItemCaseSensitive(json, "name");
+	if (cJSON_IsString(name) && (name->valuestring != NULL)) {
+		recipe->name = strdup(cJSON_GetStringValue(name));
+	}
+
+	prep_time = cJSON_GetObjectItemCaseSensitive(json, "prep_time");
+	if (cJSON_IsNumber(prep_time)) {
+		recipe->prep_time = (s64)cJSON_GetNumberValue(prep_time);
+	} else {
+		recipe->prep_time = -1;
+	}
+
+	cook_time = cJSON_GetObjectItemCaseSensitive(json, "cook_time");
+	if (cJSON_IsNumber(cook_time)) {
+		recipe->cook_time = (s64)cJSON_GetNumberValue(cook_time);
+	} else {
+		recipe->cook_time = -1;
+	}
+
+	servings = cJSON_GetObjectItemCaseSensitive(json, "servings");
+	if (cJSON_IsNumber(servings)) {
+		recipe->servings = (s64)cJSON_GetNumberValue(servings);
+	} else {
+		recipe->servings = -1;
+	}
+
+	note = cJSON_GetObjectItemCaseSensitive(json, "note");
+	if (cJSON_IsString(note) && (note->valuestring != NULL)) {
+		recipe->note = strdup(cJSON_GetStringValue(note));
+	}
+
+	ingredients = cJSON_GetObjectItemCaseSensitive(json, "ingredients");
+	cJSON_ArrayForEach(ingredient, ingredients)
+	{
+		if (recipe->ingredients_len >= ARRSIZE(recipe->ingredients)) {
+			break;
+		}
+		recipe->ingredients[recipe->ingredients_len++] = strdup(cJSON_GetStringValue(ingredient));
+	}
+
+	steps = cJSON_GetObjectItemCaseSensitive(json, "steps");
+	cJSON_ArrayForEach(step, steps)
+	{
+		if (recipe->steps_len >= ARRSIZE(recipe->steps)) {
+			break;
+		}
+		recipe->steps[recipe->steps_len++] = strdup(cJSON_GetStringValue(step));
+	}
+
+	tags = cJSON_GetObjectItemCaseSensitive(json, "tags");
+	cJSON_ArrayForEach(tag, tags)
+	{
+		if (recipe->tags_len >= ARRSIZE(recipe->tags)) {
+			break;
+		}
+		recipe->tags[recipe->tags_len++] = strdup(cJSON_GetStringValue(tag));
+	}
+
+	cJSON_Delete(json);
 
 	return recipe;
+
+bail:
+	recipe_free(recipe);
+	cJSON_Delete(json);
+	return NULL;
 }
 
 // to_json : converts a Recipe to a JSON string
 static char *to_json(struct Recipe *recipe)
 {
-	return NULL;
+	char *s;
+	size_t i, size, used;
+
+	size = BUFLARGE * 2;
+	used = 0;
+
+	s = calloc(size, sizeof(*s));
+
+#include "json_print_macros.h"
+
+	BEGIN();
+
+	ADDNUM("id", recipe->id);
+	ADDCOM();
+	ADDNUM("cook_time", recipe->cook_time);
+	ADDCOM();
+	ADDNUM("prep_time", recipe->prep_time);
+	ADDCOM();
+	ADDNUM("servings",  recipe->servings);
+	ADDCOM();
+
+	ARRBEG("ingredients");
+
+	for (i = 0; i < ARRSIZE(recipe->ingredients) || recipe->ingredients[i] == NULL; i++) {
+		ARRVAL("\"%s\"", recipe->ingredients[i]);
+	}
+
+	ARREND();
+
+	ARRBEG("steps");
+
+	for (i = 0; i < ARRSIZE(recipe->steps) || recipe->steps[i] == NULL; i++) {
+		ARRVAL("\"%s\"", recipe->steps[i]);
+	}
+
+	ARREND();
+
+	ARRBEG("tags");
+
+	for (i = 0; i < ARRSIZE(recipe->tags) || recipe->tags[i] == NULL; i++) {
+		ARRVAL("\"%s\"", recipe->tags[i]);
+	}
+
+	ARREND();
+
+	END();
+
+#include "json_print_macros.h"
+
+	assert(used < size);
+
+	return s;
+}
+
+// recipe_free : frees all of the data in the recipe object
+void recipe_free(struct Recipe *recipe)
+{
+	size_t i;
+
+	// NOTE (Brian): this actually frees the in-memory, dynamic version of a recipe, not the
+	// version that's stored to disk
+
+	if (recipe) {
+		free(recipe->name);
+		free(recipe->note);
+
+		for (i = 0; i < ARRSIZE(recipe->ingredients) && recipe->ingredients[i]; i++) {
+			free(recipe->ingredients[i]);
+		}
+
+		for (i = 0; i < ARRSIZE(recipe->steps) && recipe->steps[i]; i++) {
+			free(recipe->steps[i]);
+		}
+
+		for (i = 0; i < ARRSIZE(recipe->tags) && recipe->tags[i]; i++) {
+			free(recipe->tags[i]);
+		}
+
+		free(recipe);
+	}
 }
 

@@ -13,6 +13,18 @@ int store_open(char *fname);
 // store_initialize : sets up the backing store ((re)sizes the file, and 
 int store_initialize(void);
 
+// store_getlen : returns the length of the table describe in 'type'
+s64 store_getlen(int type);
+
+// store_getobj : gets the object with id 'id' and type 'type' from the store
+void *store_getobj(int type, u64 id);
+
+// store_addobj : adds an object to the backing store
+void *store_addobj(int type);
+
+// store_freeobj : marks the object in the list as free
+void store_freeobj(int type, u64 id);
+
 // store_read : reads all of the data into memory, from the store
 int store_read(void);
 

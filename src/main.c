@@ -185,6 +185,27 @@ void request_handler(struct http_request_s *req)
         CHKERR(503);
 #endif
 
+	// recipe endpoints
+	} else if (rcheck(req, "/api/v1/recipe", "POST")) {
+		rc = recipe_api_post(req, res);
+		CHKERR(503);
+
+	} else if (rcheck(req, "/api/v1/recipe", "GET")) {
+		rc = recipe_api_get(req, res);
+		CHKERR(503);
+
+	} else if (rcheck(req, "/api/v1/recipe/list", "GET")) {
+		rc = recipe_api_getlist(req, res);
+		CHKERR(503);
+
+	} else if (rcheck(req, "/api/v1/recipe", "PUT")) {
+		rc = recipe_api_put(req, res);
+		CHKERR(503);
+
+	} else if (rcheck(req, "/api/v1/recipe", "DELETE")) {
+		rc = recipe_api_delete(req, res);
+		CHKERR(503);
+
 	} else if (rcheck(req, "/", "GET") || rcheck(req, "/index.html", "GET")) {
 		rc = send_file(req, res, "html/index.html");
         CHKERR(503);

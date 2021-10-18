@@ -49,6 +49,10 @@ void *store_getobj(int type, u64 id)
 {
 	lump_t *lump;
 
+	// NOTE (Brian): the fact that this assertion exists is probably what's going to make
+	// record accesses pretty slow. So, in some instances, it might make sense for this to be
+	// just the return function.
+
 	assert(0 <= type && type < RT_TOTAL);
 
 	lump = &handle.header.lumps[type];
@@ -77,7 +81,7 @@ void *store_addobj(int type)
 	for (i = 0; i < lump->used; i++) {
 		base = (void *)(((unsigned char *)handle.ptrs[type]) + lump->recsize * i);
 		if (base->flags ^ OBJECT_FLAG_USED) {
-			break;
+			return (void *)base;
 		}
 		base = NULL;
 	}
@@ -120,6 +124,19 @@ void store_freeobj(int type, u64 id)
 	base->flags &= ~(OBJECT_FLAG_USED);
 }
 
+// store_getlen : returns the length of the table describe in 'type'
+s64 store_getlen(int type)
+{
+	lump_t *lump;
+	objectbase_t *base;
+
+	assert(0 <= type && type < RT_TOTAL);
+
+	lump = &handle.header.lumps[type];
+
+	return lump->used;
+}
+
 // store_initialize : sets up the backing store ((re)sizes the file, and 
 int store_initialize(void)
 {
@@ -145,13 +162,15 @@ int store_initialize(void)
 
 	lump = header.lumps + RT_USER; // assumed that RT_USER is the first
 
-	lump_first_time_setup(lump, RT_USER,      sizeof(user_t), sizeof(header));
-	lump_first_time_setup(lump, RT_RECIPE,    sizeof(recipe_t), 0);
-	lump_first_time_setup(lump, RT_TAG,       sizeof(tag_t), 0);
-	lump_first_time_setup(lump, RT_STRING128, sizeof(string_128_t), 0);
-	lump_first_time_setup(lump, RT_STRING256, sizeof(string_256_t), 0);
+	lump_first_time_setup(lump, RT_USER,       sizeof(user_t), sizeof(header));
+	lump_first_time_setup(lump, RT_RECIPE,     sizeof(recipe_t), 0);
+	lump_first_time_setup(lump, RT_STEP,       sizeof(step_t), 0);
+	lump_first_time_setup(lump, RT_INGREDIENT, sizeof(ingredient_t), 0);
+	lump_first_time_setup(lump, RT_TAG,        sizeof(tag_t), 0);
+	lump_first_time_setup(lump, RT_STRING128,  sizeof(string_128_t), 0);
+	lump_first_time_setup(lump, RT_STRING256,  sizeof(string_256_t), 0);
 
-	for (i = 0, size = 0x1000; i < RT_TOTAL; i++) {
+	for (i = 0, size = sizeof(header); i < RT_TOTAL; i++) {
 		size += header.lumps[i].recsize * header.lumps[i].allocated;
 	}
 
