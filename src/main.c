@@ -140,8 +140,13 @@ int rcheck(struct http_request_s *req, char *target, char *method)
 	for (i = 0; i < t.len && t.buf[i] != '?'; i++)
 		;
 
+	// NOTE (Brian): I bet this is the thing we don't want.
+	// This logic probably needs to be replaced with like, some integer, query param checking
+	// stuff.
+#if 0
 	if (strlen(target) != i)
 		return 0;
+#endif
 
 	// stop checking the target before query parameters
 	for (i = 0; i < t.len && i < strlen(target) && target[i] != '?'; i++) {
@@ -206,16 +211,16 @@ void request_handler(struct http_request_s *req)
 		rc = recipe_api_delete(req, res);
 		CHKERR(503);
 
-	} else if (rcheck(req, "/", "GET") || rcheck(req, "/index.html", "GET")) {
-		rc = send_file(req, res, "html/index.html");
-        CHKERR(503);
-
 	} else if (rcheck(req, "/ui.js", "GET")) {
 		rc = send_file(req, res, "html/ui.js");
         CHKERR(503);
 
 	} else if (rcheck(req, "/styles.css", "GET")) {
 		rc = send_style(req, res, "html/styles.css");
+        CHKERR(503);
+
+	} else if (rcheck(req, "/", "GET") || rcheck(req, "/index.html", "GET")) {
+		rc = send_file(req, res, "html/index.html");
         CHKERR(503);
 
 	} else {

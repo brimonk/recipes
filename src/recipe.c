@@ -85,49 +85,16 @@ int recipe_api_post(struct http_request_s *req, struct http_response_s *res)
 
 	http_respond(req, res);
 
+	free(recipe);
+
 	return 0;
 }
 
 // recipe_api_put : endpoint, PUT - /api/v1/recipe/{id}
 int recipe_api_put(struct http_request_s *req, struct http_response_s *res)
 {
-	recipe_id id;
-	struct Recipe *recipe;
-	struct http_string_s body;
-	char *json;
-
-	body = http_request_body(req);
-
-	json = strndup(body.buf, body.len);
-	if (json == NULL) {
-		// return http error
-		return -1;
-	}
-
-	recipe = from_json(json);
-
-	free(json);
-
-	if (recipe == NULL) {
-		ERR("couldn't parse recipe from json!\n");
-		return -1;
-	}
-
-	if (recipe_validation(recipe) < 0) {
-		ERR("recipe record invalid!\n");
-		return -1;
-	}
-
-#if 0
-	id = recipe_update(recipe);
-	if (id == 0) {
-		ERR("couldn't save the recipe to the disk!\n");
-		return -1;
-	}
-#endif
-
-	// fill out response information
-	http_response_status(res, 200);
+	http_response_status(res, 400);
+	http_respond(req, res);
 
 	return 0;
 }
@@ -137,41 +104,36 @@ int recipe_api_get(struct http_request_s *req, struct http_response_s *res)
 {
 	recipe_id id;
 	struct Recipe *recipe;
-	struct http_string_s body;
+	struct http_string_s uri;
 	char *json;
+	char *idstr;
 
-	body = http_request_body(req);
+	uri = http_request_target(req);
+	idstr = strndup(strrchr(uri.buf, '/'), strchr(strrchr(uri.buf, '/') + 1, ' ') - uri.buf);
+	id = atoll(idstr);
+	free(idstr);
 
-	json = strndup(body.buf, body.len);
+	recipe = recipe_get(id);
+	if (recipe == NULL) {
+		ERR("couldn't fetch the recipe from the database!\n");
+		return -1;
+	}
+
+	json = to_json(recipe);
 	if (json == NULL) {
-		// return http error
-		return -1;
-	}
-
-	recipe = from_json(json);
-
-	free(json);
-
-	if (recipe == NULL) {
-		ERR("couldn't parse recipe from json!\n");
-		return -1;
-	}
-
-	if (recipe_validation(recipe) < 0) {
-		ERR("recipe record invalid!\n");
-		return -1;
-	}
-
-	// NOTE (Brian): this has to be the id of the recipe
-	// recipe = recipe_get(recipe);
-	recipe = recipe_get(0);
-	if (recipe == NULL) {
-		ERR("couldn't save the recipe to the disk!\n");
+		ERR("couldn't convert the recipe to JSON\n");
 		return -1;
 	}
 
 	// fill out response information
 	http_response_status(res, 200);
+
+	http_response_body(res, json, strlen(json));
+
+	http_respond(req, res);
+
+	free(json);
+	recipe_free(recipe);
 
 	return 0;
 
@@ -261,6 +223,76 @@ s64 recipe_add(struct Recipe *recipe)
 	return record->base.id;
 }
 
+// recipe_get : fetches a recipe object from the store, and parses it
+struct Recipe *recipe_get(s64 id)
+{
+	struct Recipe *recipe;
+	recipe_t *record;
+
+	ingredient_t *ingredient;
+	step_t *step;
+	tag_t *tag;
+
+	string_128_t *string128;
+	string_256_t *string256;
+
+	size_t i, len;
+
+	recipe = calloc(1, sizeof(*recipe));
+	if (recipe == NULL) {
+		return NULL;
+	}
+
+	record = store_getobj(RT_RECIPE, id);
+
+	recipe->id = record->base.id;
+
+	string128 = store_getobj(RT_STRING128, record->name_id);
+	recipe->name = strndup(string128->string, sizeof(string128->string));
+
+	recipe->prep_time = record->prep_time;
+	recipe->cook_time = record->cook_time;
+	recipe->servings = record->servings;
+
+	string256 = store_getobj(RT_STRING256, record->note_id);
+	recipe->name = strndup(string256->string, sizeof(string256->string));
+
+	// aggregate all of the ingredients
+	for (i = 0, len = store_getlen(RT_INGREDIENT); i < len; i++) {
+		ingredient = store_getobj(RT_INGREDIENT, i);
+		if (recipe->id == ingredient->recipe_id) {
+			string128 = store_getobj(RT_STRING128, ingredient->string_id);
+
+			recipe->ingredients[recipe->ingredients_len++] =
+				strndup(string128->string, sizeof(string128->string));
+		}
+	}
+
+	// aggregate all of the steps
+	for (i = 0, len = store_getlen(RT_STEP); i < len; i++) {
+		step = store_getobj(RT_STEP, i);
+		if (recipe->id == step->recipe_id) {
+			string128 = store_getobj(RT_STRING128, step->string_id);
+
+			recipe->steps[recipe->steps_len++] =
+				strndup(string128->string, sizeof(string128->string));
+		}
+	}
+
+	// aggregate all of the tags
+	for (i = 0, len = store_getlen(RT_TAG); i < len; i++) {
+		tag = store_getobj(RT_TAG, i);
+		if (recipe->id == tag->recipe_id) {
+			string128 = store_getobj(RT_STRING128, tag->string_id);
+
+			recipe->tags[recipe->tags_len++] =
+				strndup(string128->string, sizeof(string128->string));
+		}
+	}
+
+	return recipe;
+}
+
 // recipe_update : updates the recipe at id 'id', with 'recipe''s data
 s64 recipe_update(s64 id, struct Recipe *recipe)
 {
@@ -311,12 +343,6 @@ s64 recipe_delete(s64 id)
 	store_freeobj(RT_RECIPE, id);
 
 	return 0;
-}
-
-// recipe_get : fetches a recipe object from the store, and parses it
-struct Recipe *recipe_get(s64 id)
-{
-	return NULL;
 }
 
 // recipe_validation : returns non-zero if the input object is invalid
@@ -512,24 +538,34 @@ static char *to_json(struct Recipe *recipe)
 
 	ARRBEG("ingredients");
 
-	for (i = 0; i < ARRSIZE(recipe->ingredients) || recipe->ingredients[i] == NULL; i++) {
+	for (i = 0; i < ARRSIZE(recipe->ingredients) && recipe->ingredients[i] != NULL; i++) {
 		ARRVAL("\"%s\"", recipe->ingredients[i]);
+		if (i + 1 < ARRSIZE(recipe->ingredients) && recipe->ingredients[i + 1] != NULL)
+			ADDCOM();
 	}
 
 	ARREND();
+
+	ADDCOM();
 
 	ARRBEG("steps");
 
-	for (i = 0; i < ARRSIZE(recipe->steps) || recipe->steps[i] == NULL; i++) {
+	for (i = 0; i < ARRSIZE(recipe->steps) && recipe->steps[i] != NULL; i++) {
 		ARRVAL("\"%s\"", recipe->steps[i]);
+		if (i + 1 < ARRSIZE(recipe->steps) && recipe->steps[i + 1] != NULL)
+			ADDCOM();
 	}
 
 	ARREND();
 
+	ADDCOM();
+
 	ARRBEG("tags");
 
-	for (i = 0; i < ARRSIZE(recipe->tags) || recipe->tags[i] == NULL; i++) {
+	for (i = 0; i < ARRSIZE(recipe->tags) && recipe->tags[i] != NULL; i++) {
 		ARRVAL("\"%s\"", recipe->tags[i]);
+		if (i + 1 < ARRSIZE(recipe->tags) && recipe->tags[i + 1] != NULL)
+			ADDCOM();
 	}
 
 	ARREND();
