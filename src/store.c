@@ -88,9 +88,9 @@ void *store_addobj(int type)
 
 	if (lump->used >= lump->allocated) { // reallocation logic
 		if (lump->allocated < BUFLARGE) {
-			lump->allocated += BUFLARGE;
-		} else {
 			lump->allocated *= 2;
+		} else {
+			lump->allocated += BUFLARGE;
 		}
 
 		size = lump->allocated * lump->recsize;
@@ -98,7 +98,7 @@ void *store_addobj(int type)
 
 		handle.ptrs[type] = realloc(handle.ptrs[type], size);
 
-		memset(((u8 *)handle.ptrs[type]) + size, 0, size - used);
+		memset(((u8 *)handle.ptrs[type]) + used, 0, size - used);
 	}
 
 	base = (void *)(((unsigned char *)handle.ptrs[type]) + lump->recsize * lump->used);
