@@ -33,11 +33,11 @@ s64 recipe_delete(s64 id);
 // recipe_validation : returns non-zero if the input object is invalid
 int recipe_validation(struct Recipe *recipe);
 
-// from_json : converts a JSON string into a Recipe
-static struct Recipe *from_json(char *s);
+// recipe_from_json : converts a JSON string into a Recipe
+static struct Recipe *recipe_from_json(char *s);
 
-// to_json : converts a Recipe to a JSON string
-static char *to_json(struct Recipe *recipe);
+// recipe_to_json : converts a Recipe to a JSON string
+static char *recipe_to_json(struct Recipe *recipe);
 
 // recipe_api_post : endpoint, POST - /api/v1/recipe
 int recipe_api_post(struct http_request_s *req, struct http_response_s *res)
@@ -56,7 +56,7 @@ int recipe_api_post(struct http_request_s *req, struct http_response_s *res)
 		return -1;
 	}
 
-	recipe = from_json(json);
+	recipe = recipe_from_json(json);
 
 	free(json);
 
@@ -104,14 +104,24 @@ int recipe_api_get(struct http_request_s *req, struct http_response_s *res)
 {
 	recipe_id id;
 	struct Recipe *recipe;
+
+	// fucking web
 	struct http_string_s uri;
+	char *url;
+
 	char *json;
 	char *idstr;
 
 	uri = http_request_target(req);
-	idstr = strndup(strrchr(uri.buf, '/'), strchr(strrchr(uri.buf, '/') + 1, ' ') - uri.buf);
+
+	url = strndup(uri.buf, strchr(uri.buf, ' ') - uri.buf);
+
+	idstr = strndup(strrchr(url, '/') + 1, strlen(strrchr(url, '/') + 1));
+
 	id = atoll(idstr);
+
 	free(idstr);
+	free(url);
 
 	recipe = recipe_get(id);
 	if (recipe == NULL) {
@@ -119,7 +129,7 @@ int recipe_api_get(struct http_request_s *req, struct http_response_s *res)
 		return -1;
 	}
 
-	json = to_json(recipe);
+	json = recipe_to_json(recipe);
 	if (json == NULL) {
 		ERR("couldn't convert the recipe to JSON\n");
 		return -1;
@@ -136,19 +146,49 @@ int recipe_api_get(struct http_request_s *req, struct http_response_s *res)
 	recipe_free(recipe);
 
 	return 0;
+}
 
+// recipe_api_getlist : endpoint, GET - /api/v1/recipe/list
+int recipe_api_getlist(struct http_request_s *req, struct http_response_s *res)
+{
+	// NOTE (Brian): parameters from the uri
+	//
+	// siz: page size, positive integer, x > 0
+	// num: page number, positive integer, x > 0
+	// qry: query, text. If not present, just iterates over the available recipes
+
+#if 0
+	struct http_string_s h_siz, h_num, h_qry;
+	search_t search;
+
+	memset(&search, 0, sizeof search);
+
+	search.siz = 20;
+	search.num = 0;
+
+	h_siz = http_request_query(req, "siz");
+	if (h_siz.buf != NULL) {
+		search.siz = atol(h_siz.buf);
+	}
+
+	h_num = http_request_query(req, "num");
+	if (h_num.buf != NULL) {
+		search.num = atol(h_num.buf);
+	}
+
+	h_qry = http_request_query(req, "qry");
+	if (h_qry.buf != NULL) {
+		strncpy(search.query, h_qry.buf, sizeof(search.query));
+	}
+#endif
+
+	return 0;
 }
 
 // recipe_api_delete : endpoint, DELETE - /api/v1/recipe/{id}
 int recipe_api_delete(struct http_request_s *req, struct http_response_s *res)
 {
 	// parse out the recipe delete id, and mark it as deleted
-	return 0;
-}
-
-// recipe_api_getlist : endpoint, GET - /api/v1/recipe/list
-int recipe_api_getlist(struct http_request_s *req, struct http_response_s *res)
-{
 	return 0;
 }
 
@@ -345,6 +385,37 @@ s64 recipe_delete(s64 id)
 	return 0;
 }
 
+// recipe_search : fills out a search structure with results
+int recipe_search(search_t *search)
+{
+	recipe_t *recipe;
+	tag_t *tag;
+	string_128_t *name, *tagtext;
+	size_t i, rlen, tlen;
+	size_t skip;
+
+	assert(search->type == RT_RECIPE);
+
+	skip = search->siz * search->num;
+
+	rlen = store_getlen(RT_RECIPE);
+	tlen = store_getlen(RT_TAG);
+
+	for (i = 0; i < rlen && search->cnt < ARRSIZE(search->id); i++) {
+		recipe = store_getobj(RT_RECIPE, i);
+		assert(recipe != NULL);
+
+		name = store_getobj(RT_STRING128, recipe->name_id);
+		assert(name != NULL);
+
+		if (strstr(name->string, search->query) != NULL) {
+			search->id[search->cnt++] = recipe->base.id;
+		}
+	}
+
+	return 0;
+}
+
 // recipe_validation : returns non-zero if the input object is invalid
 int recipe_validation(struct Recipe *recipe)
 {
@@ -400,8 +471,8 @@ int recipe_validation(struct Recipe *recipe)
 	return 0;
 }
 
-// from_json : converts a JSON string into a Recipe
-static struct Recipe *from_json(char *s)
+// recipe_from_json : converts a JSON string into a Recipe
+static struct Recipe *recipe_from_json(char *s)
 {
 	struct Recipe *recipe;
 	cJSON *json;
@@ -512,8 +583,8 @@ bail:
 	return NULL;
 }
 
-// to_json : converts a Recipe to a JSON string
-static char *to_json(struct Recipe *recipe)
+// recipe_to_json : converts a Recipe to a JSON string
+static char *recipe_to_json(struct Recipe *recipe)
 {
 	char *s;
 	size_t i, size, used;
@@ -527,6 +598,8 @@ static char *to_json(struct Recipe *recipe)
 
 	BEGIN();
 
+	ADDSTR("name", recipe->name);
+	ADDCOM();
 	ADDNUM("id", recipe->id);
 	ADDCOM();
 	ADDNUM("cook_time", recipe->cook_time);
@@ -534,6 +607,8 @@ static char *to_json(struct Recipe *recipe)
 	ADDNUM("prep_time", recipe->prep_time);
 	ADDCOM();
 	ADDNUM("servings",  recipe->servings);
+	ADDCOM();
+	ADDSTR("note", recipe->note);
 	ADDCOM();
 
 	ARRBEG("ingredients");

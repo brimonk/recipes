@@ -78,18 +78,22 @@ extern handle_t handle;
 #define USAGE ("USAGE: %s <dbname>\n")
 #define SCHEMA ("src/schema.sql")
 
+struct http_server_s *server;
+
 // handle_sigint: handles SIGINT so we can write to the database
 void handle_sigint(int sig)
 {
 	store_write();
 	store_free();
+
+	http_server_free(server);
+
 	printf("\n");
 	exit(1);
 }
 
 int main(int argc, char **argv)
 {
-	struct http_server_s *server;
 
 	if (argc < 2) {
 		fprintf(stderr, USAGE, argv[0]);
@@ -105,6 +109,8 @@ int main(int argc, char **argv)
 	signal(SIGINT, handle_sigint);
 
 	http_server_listen(server);
+
+	http_server_free(server);
 
 	store_write();
 
@@ -143,6 +149,8 @@ int rcheck(struct http_request_s *req, char *target, char *method)
 	// NOTE (Brian): I bet this is the thing we don't want.
 	// This logic probably needs to be replaced with like, some integer, query param checking
 	// stuff.
+	//
+	// If something's fishy with 'rcheck', it's this issue that you have to look into.
 #if 0
 	if (strlen(target) != i)
 		return 0;
@@ -183,11 +191,6 @@ void request_handler(struct http_request_s *req)
 	} else if (rcheck(req, "/api/v1/user/logout", "POST")) {
 		rc = user_api_logout(req, res);
 		CHKERR(503);
-
-	// static files, unrelated to main CRUD operations
-	} else if (rcheck(req, "/style.css", "GET")) {
-		rc = send_file(req, res, "html/style.css");
-        CHKERR(503);
 #endif
 
 	// recipe endpoints
@@ -211,6 +214,7 @@ void request_handler(struct http_request_s *req)
 		rc = recipe_api_delete(req, res);
 		CHKERR(503);
 
+	// static files, unrelated to main CRUD operations
 	} else if (rcheck(req, "/ui.js", "GET")) {
 		rc = send_file(req, res, "html/ui.js");
         CHKERR(503);

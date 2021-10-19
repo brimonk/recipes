@@ -4,6 +4,8 @@
 #include "common.h"
 #include "objects.h"
 
+#define MAX_LIST_RESULTS (100)
+
 // Recipe : this is the object the user will, effectively, send us
 struct Recipe {
 	recipe_id id;
@@ -24,6 +26,20 @@ struct Recipe {
 
 	char *note;
 };
+
+// search_t : the results of a search query (we only search on one thing in this app)
+typedef struct search_t {
+	// request
+	size_t siz; // page size (up to 100, common sizes are 10, 20, 25, 50, 100)
+	size_t num; // page number
+	char query[BUFSMALL];
+
+	int type; // record type (RT_*)
+
+	// response
+	u64 id[MAX_LIST_RESULTS]; // we support up to 100 response items
+	size_t cnt;
+} search_t;
 
 // recipe_api_post : endpoint, POST - /api/v1/recipe
 int recipe_api_post(struct http_request_s *req, struct http_response_s *res);

@@ -38,7 +38,12 @@ function H3(text) {
 
 // H4: returns m("h4", text)
 function H4(text) {
-    return m("h4", text);
+    return m("h4", text + "");
+}
+
+// P : paragraph wrapper
+function P(text) {
+    return m("p", text);
 }
 
 // DIV: returns m("div", arg)
@@ -52,10 +57,10 @@ function Button(text, fn) {
 }
 
 // InputComponent: a little more complicated than the others
-function InputComponent(initialVnode) {
-    let object = initialVnode.attrs.object;
-    let prop = initialVnode.attrs.prop;
-    let type = initialVnode.attrs.type;
+function InputComponent(vnode) {
+    let object = vnode.attrs.object;
+    let prop = vnode.attrs.prop;
+    let type = vnode.attrs.type;
 
     const types = [ "text", "number", "email" ];
 
@@ -87,13 +92,13 @@ function InputComponent(initialVnode) {
 }
 
 // TextAreaComponent: a small text area wrapper thing
-function TextAreaComponent(initialVnode) {
-    let object = initialVnode.attrs.object;
-    let prop = initialVnode.attrs.prop;
+function TextAreaComponent(vnode) {
+    let object = vnode.attrs.object;
+    let prop = vnode.attrs.prop;
 
-    let cols = initialVnode.attrs.cols;
-    let rows = initialVnode.attrs.rows;
-    let maxlen = initialVnode.attrs.maxlen;
+    let cols = vnode.attrs.cols;
+    let rows = vnode.attrs.rows;
+    let maxlen = vnode.attrs.maxlen;
 
     const coalesce = (x, def) => {
         if (x !== +x)
@@ -102,8 +107,8 @@ function TextAreaComponent(initialVnode) {
     };
 
     cols = coalesce(cols, 5);
-    rows = coalesce(cols, 5);
-    maxlen = coalesce(maxlen, 200);
+    rows = coalesce(rows, 5);
+    maxlen = coalesce(maxlen, 40);
 
     return {
         view: function(vnode) {
@@ -122,9 +127,9 @@ function TextAreaComponent(initialVnode) {
 }
 
 // ListComponent: a component that helps us manipulate and mangle lists
-function ListComponent(initialVnode) {
-    let list = initialVnode.attrs.list;
-    let type = initialVnode.attrs.type;
+function ListComponent(vnode) {
+    let list = vnode.attrs.list;
+    let type = vnode.attrs.type;
 
     if (list.length === 0) {
         list.push("");
@@ -170,7 +175,7 @@ function ListComponent(initialVnode) {
 }
 
 // MenuComponent
-function MenuComponent(initialVnode) {
+function MenuComponent(vnode) {
     return {
         view: function(vnode) {
             return m("nav", [
@@ -254,8 +259,37 @@ class Recipe {
     }
 }
 
-// RecipeComponent : Handles Recipe CRUD Operations
-function RecipeComponent(initialVnode) {
+// RecipeViewComponent : Handles the Reading of a Recipe
+function RecipeViewComponent(vnode) {
+    let id = m.route.param("id");
+    let recipe = new Recipe(id);
+
+    return {
+        view: function(vnode) {
+            return [
+                m(MenuComponent),
+
+                H2(recipe.name),
+
+                DIV([
+                    H3("Preparation Time"),
+                    P(recipe.prep_time),
+
+                    H3("Cook Time"),
+                    P(recipe.cook_time),
+
+                    H3("Servings"),
+                    P(recipe.servings),
+
+                    m("p", recipe.note)
+                ]),
+            ];
+        }
+    };
+}
+
+// RecipeEditComponent : Handles Recipe CRUD Operations
+function RecipeEditComponent(vnode) {
     let id = m.route.param("id");
     let recipe = new Recipe(id);
 
@@ -300,6 +334,8 @@ function RecipeComponent(initialVnode) {
 
             let cancel_button = Button("Cancel", (e) => m.route.set("/"));
 
+            let delete_button = Button("Delete", (e) => recipe.remove());
+
             return [
                 m(MenuComponent),
 
@@ -323,7 +359,7 @@ function RecipeComponent(initialVnode) {
 };
 
 // SearchComponent: 
-function SearchComponent(initialVnode) {
+function SearchComponent(vnode) {
     return {
         view: function(vnode) {
             return [
@@ -335,7 +371,7 @@ function SearchComponent(initialVnode) {
 }
 
 // HomeComponent
-function HomeComponent(initialVnode) {
+function HomeComponent(vnode) {
     var count = 0;
 
     return {
@@ -359,8 +395,8 @@ function HomeComponent(initialVnode) {
 }
 
 // SuccessComponent
-function SuccessComponent(initialVnode) {
-    const { message, next, timeout } = initialVnode.attrs;
+function SuccessComponent(vnode) {
+    const { message, next, timeout } = vnode.attrs;
 
     setTimeout(() => {
         m.route.set(next);
@@ -377,8 +413,8 @@ function SuccessComponent(initialVnode) {
 }
 
 // ErrorComponent
-function ErrorComponent(initialVnode) {
-    const { message, next, timeout } = initialVnode.attrs;
+function ErrorComponent(vnode) {
+    const { message, next, timeout } = vnode.attrs;
 
     setTimeout(() => {
         m.route.set(next);
@@ -595,7 +631,7 @@ function LoginComponent(inivialVnode) {
 }
 
 // New User Component
-function NewUserComponent(initialVnode) {
+function NewUserComponent(vnode) {
     const user = new User("newuser");
 
     return {
@@ -677,8 +713,8 @@ const routes = {
     "/newuser": NewUserComponent,
     "/search": SearchComponent,
     "/login": LoginComponent,
-    "/recipe/new": RecipeComponent,
-    "/recipe/:id": RecipeComponent,
+    "/recipe/new": RecipeEditComponent,
+    "/recipe/:id": RecipeViewComponent,
 };
 
 m.route(root, "/", routes);
