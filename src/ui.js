@@ -130,6 +130,7 @@ function TextAreaComponent(vnode) {
 function ListComponent(vnode) {
     let list = vnode.attrs.list;
     let type = vnode.attrs.type;
+    let isview = vnode.attrs.isview ?? false;
 
     if (list.length === 0) {
         list.push("");
@@ -144,33 +145,43 @@ function ListComponent(vnode) {
         onclick: () => list.push("")
     }, "+");
 
-    return {
-        view: function(vnode) {
-            const inputs = list.map((e, i, a) => {
-                const is_last = i === a.length - 1;
+    const viewfn = function(innervnode) {
+        const items = list.map((e, i, a) => {
+            return m("li", a[i]);
+        });
 
-                const input = m("input", {
-                    value: a[i],
-                    oninput: (e) => a[i] = e.target.value,
-                });
+        return m(type, items);
+    }
 
-                const sub_btn = m("button[type=button]", {
-                    onclick: () => list.splice(i, 1)
-                }, "-");
+    const inputfn = function(innervnode) {
+        const items = list.map((e, i, a) => {
+            const is_last = i === a.length - 1;
 
-                let controls = [ input ];
-
-                if (a.length > 1) {
-                    controls.push(sub_btn);
-                }
-
-                return m("li", controls);
+            const content = m("input", {
+                value: a[i],
+                oninput: (e) => a[i] = e.target.value,
             });
 
-            let controls = [ inputs, add_btn ];
+            const sub_btn = m("button[type=button]", {
+                onclick: () => list.splice(i, 1)
+            }, "-");
 
-            return m(type, controls);
-        }
+            let controls = [ content ];
+
+            if (a.length > 1) {
+                controls.push(sub_btn);
+            }
+
+            return m("li", controls);
+        });
+
+        let controls = [ items, add_btn ];
+
+        return m(type, controls);
+    }
+
+    return {
+        view: isview ? viewfn : inputfn
     };
 }
 
@@ -192,20 +203,25 @@ class Recipe {
     constructor(id) {
         this.id = id;
 
-        if (this.id) {
+        this.init();
+
+        if (this.id !== undefined) {
             this.fetch();
-        } else {
-            this.name = "";
-
-            this.cook_time = null;
-            this.prep_time = null;
-
-            this.note = "";
-
-            this.ingredients = [];
-            this.steps = [];
-            this.tags = [];
         }
+    }
+
+    // init : initializes a blank Recipe
+    init() {
+        this.name = null;
+
+        this.cook_time = null;
+        this.prep_time = null;
+
+        this.note = null;
+
+        this.ingredients = [];
+        this.steps = [];
+        this.tags = [];
     }
 
     // fetch : fetches from the remote
@@ -214,19 +230,21 @@ class Recipe {
             method: "GET",
             url: `/api/v1/recipe/${this.id}`,
         }).then((x) => {
-            console.log(`got recipe, ${this.id}`);
-            console.log(x);
+            this.id = x.id;
 
             this.name = x.name;
 
             this.cook_time = x.cook_time;
             this.prep_time = x.prep_time;
+            this.servings = x.servings;
 
-            this.note = "";
+            this.note = x.note;
 
-            this.ingredients = [];
-            this.steps = [];
-            this.tags = [];
+            this.ingredients = x.ingredients;
+            this.steps = x.steps;
+            this.tags = x.tags;
+
+            m.redraw();
         }).catch((err) => {
             console.error(err);
         });
@@ -264,25 +282,55 @@ function RecipeViewComponent(vnode) {
     let id = m.route.param("id");
     let recipe = new Recipe(id);
 
+    console.log(recipe);
+
     return {
         view: function(vnode) {
+            let content;
+
+            if (recipe.name === null || recipe.name === "") {
+                content = m("p", "Now Loading...");
+            } else {
+
+                content = [
+                    H2(recipe.name),
+
+                    DIV([
+                        H3("Preparation Time"),
+                        P(recipe.prep_time),
+
+                        H3("Cook Time"),
+                        P(recipe.cook_time),
+
+                        H3("Servings"),
+                        P(recipe.servings),
+
+                        H3("Ingredients"),
+                        m(ListComponent, {
+                            list: recipe.ingredients, type: "ul", isview: true
+                        }),
+
+                        H3("Steps"),
+                        m(ListComponent, {
+                            list: recipe.steps, type: "ol", isview: true
+                        }),
+
+                        H3("Tags"),
+                        m(ListComponent, {
+                            list: recipe.tags, type: "ul", isview: true
+                        }),
+
+                        H3("Notes"),
+                        m("p", recipe.note),
+
+                        Button("Edit", (e) => m.route.set(`/recipe/${recipe.id}/edit`))
+                    ])
+                ];
+            }
+
             return [
                 m(MenuComponent),
-
-                H2(recipe.name),
-
-                DIV([
-                    H3("Preparation Time"),
-                    P(recipe.prep_time),
-
-                    H3("Cook Time"),
-                    P(recipe.cook_time),
-
-                    H3("Servings"),
-                    P(recipe.servings),
-
-                    m("p", recipe.note)
-                ]),
+                content
             ];
         }
     };
@@ -713,8 +761,10 @@ const routes = {
     "/newuser": NewUserComponent,
     "/search": SearchComponent,
     "/login": LoginComponent,
+
     "/recipe/new": RecipeEditComponent,
     "/recipe/:id": RecipeViewComponent,
+    "/recipe/:id/edit": RecipeEditComponent,
 };
 
 m.route(root, "/", routes);

@@ -85,7 +85,7 @@ int recipe_api_post(struct http_request_s *req, struct http_response_s *res)
 
 	http_respond(req, res);
 
-	free(recipe);
+	recipe_free(recipe);
 
 	return 0;
 }
@@ -135,6 +135,8 @@ int recipe_api_get(struct http_request_s *req, struct http_response_s *res)
 		return -1;
 	}
 
+	recipe_free(recipe);
+
 	// fill out response information
 	http_response_status(res, 200);
 
@@ -143,7 +145,6 @@ int recipe_api_get(struct http_request_s *req, struct http_response_s *res)
 	http_respond(req, res);
 
 	free(json);
-	recipe_free(recipe);
 
 	return 0;
 }
@@ -295,7 +296,7 @@ struct Recipe *recipe_get(s64 id)
 	recipe->servings = record->servings;
 
 	string256 = store_getobj(RT_STRING256, record->note_id);
-	recipe->name = strndup(string256->string, sizeof(string256->string));
+	recipe->note = strndup(string256->string, sizeof(string256->string));
 
 	// aggregate all of the ingredients
 	for (i = 0, len = store_getlen(RT_INGREDIENT); i < len; i++) {
