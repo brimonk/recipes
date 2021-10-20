@@ -275,6 +275,18 @@ class Recipe {
             console.error("this is invalid!");
         }
     }
+
+    // remove : attempts to remove the recipe from the database
+    remove() {
+        if (this.id !== undefined && this.id >= 0) {
+            return m.request({
+                method: "DELETE",
+                url: `/api/v1/recipe/${this.id}`
+            });
+        } else {
+            return Promise.reject(new Error(`cannot delete a recipe that doesn't exist!`));
+        }
+    }
 }
 
 // RecipeViewComponent : Handles the Reading of a Recipe
@@ -382,7 +394,11 @@ function RecipeEditComponent(vnode) {
 
             let cancel_button = Button("Cancel", (e) => m.route.set("/"));
 
-            let delete_button = Button("Delete", (e) => recipe.remove());
+            let delete_button = Button("Delete", (e) => {
+                recipe.remove()
+                    .then(() => m.route.set("/"))
+                    .catch((x) => console.error(x));
+            });
 
             return [
                 m(MenuComponent),
@@ -399,7 +415,7 @@ function RecipeEditComponent(vnode) {
                     H4("Tags"), tags_ctrl,
                     H4("Notes"), notes_ctrl,
 
-                    DIV([ log_button, submit_button, cancel_button ])
+                    DIV([ log_button, submit_button, cancel_button, delete_button ])
                 ]),
             ];
         }

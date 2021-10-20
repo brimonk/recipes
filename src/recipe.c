@@ -104,27 +104,22 @@ int recipe_api_get(struct http_request_s *req, struct http_response_s *res)
 {
 	recipe_id id;
 	struct Recipe *recipe;
-
-	// fucking web
 	struct http_string_s uri;
 	char *url;
-
 	char *json;
-	char *idstr;
+    int rc;
 
 	uri = http_request_target(req);
-
 	url = strndup(uri.buf, strchr(uri.buf, ' ') - uri.buf);
 
-	idstr = strndup(strrchr(url, '/') + 1, strlen(strrchr(url, '/') + 1));
+    rc = sscanf(url, "/api/v1/recipe/%lld", &id);
+    assert(rc == 1);
 
-	id = atoll(idstr);
-
-	free(idstr);
 	free(url);
 
 	recipe = recipe_get(id);
 	if (recipe == NULL) {
+        // TODO (Brian): return HTTP error
 		ERR("couldn't fetch the recipe from the database!\n");
 		return -1;
 	}
@@ -189,7 +184,29 @@ int recipe_api_getlist(struct http_request_s *req, struct http_response_s *res)
 // recipe_api_delete : endpoint, DELETE - /api/v1/recipe/{id}
 int recipe_api_delete(struct http_request_s *req, struct http_response_s *res)
 {
-	// parse out the recipe delete id, and mark it as deleted
+    recipe_id id;
+    struct http_string_s uri;
+    char *url;
+    int rc;
+
+    uri = http_request_target(req);
+    url = strndup(uri.buf, strchr(uri.buf, ' ') - uri.buf);
+
+    rc = sscanf(url, "/api/v1/recipe/%lld", &id);
+    assert(rc == 1);
+
+    free(url);
+
+    rc = recipe_delete(id);
+    if (rc < 0) {
+        // TODO (Brian): return HTTP error
+        ERR("couldn't delete the recipe from the database!\n");
+        return -1;
+    }
+
+    http_response_status(res, 200);
+    http_respond(req, res);
+
 	return 0;
 }
 
@@ -279,12 +296,15 @@ struct Recipe *recipe_get(s64 id)
 
 	size_t i, len;
 
+	record = store_getobj(RT_RECIPE, id);
+    if (record == NULL) {
+        return NULL;
+    }
+
 	recipe = calloc(1, sizeof(*recipe));
 	if (recipe == NULL) {
 		return NULL;
 	}
-
-	record = store_getobj(RT_RECIPE, id);
 
 	recipe->id = record->base.id;
 
@@ -382,6 +402,8 @@ s64 recipe_delete(s64 id)
 	store_freeobj(RT_STRING256, recipe->note_id);
 
 	store_freeobj(RT_RECIPE, id);
+
+	store_write();
 
 	return 0;
 }
