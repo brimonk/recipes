@@ -27,11 +27,25 @@ struct Recipe {
 	char *note;
 };
 
+// RecipeSearchQuery : contains the properties you're allowed to search for
+struct RecipeSearchQuery {
+	size_t siz; // page size (up to 100, common sizes are 10, 20, 25, 50, 100)
+	size_t num; // page number
+	char *text; // the text of a user's search
+};
+
+struct RecipeSearchResult {
+	recipe_id id;
+};
+
+// 
+typedef struct RecipeSearch {
+	recipe_id id;
+} RecipeSearch;
+
 // search_t : the results of a search query (we only search on one thing in this app)
 typedef struct search_t {
 	// request
-	size_t siz; // page size (up to 100, common sizes are 10, 20, 25, 50, 100)
-	size_t num; // page number
 	char query[BUFSMALL];
 
 	int type; // record type (RT_*)

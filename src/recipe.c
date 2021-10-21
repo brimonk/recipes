@@ -411,6 +411,7 @@ s64 recipe_delete(s64 id)
 // recipe_search : fills out a search structure with results
 int recipe_search(search_t *search)
 {
+#if 0
 	recipe_t *recipe;
 	tag_t *tag;
 	string_128_t *name, *tagtext;
@@ -435,6 +436,7 @@ int recipe_search(search_t *search)
 			search->id[search->cnt++] = recipe->base.id;
 		}
 	}
+#endif
 
 	return 0;
 }

@@ -51,15 +51,44 @@ function DIV(arg) {
     return m("div", arg);
 }
 
+// Divider : returns a content divider
+function Divider() {
+    return m("div", { class: "mui-divider" });
+}
+
 // Button: returns a small button wrapper
 function Button(text, fn) {
-    return m("button[type=button]", { onclick: (e) => fn(e) }, text);
+    return m("button[type=button]", {
+        onclick: (e) => fn(e), class: "mui-btn mui-btn--raised"
+    }, text);
+}
+
+// ButtonPrimary : makes a button with a primary color
+function ButtonPrimary(text, fn) {
+    return m("button[type=button]", {
+        onclick: (e) => fn(e), class: "mui-btn mui-btn--raised mui-btn--primary"
+    }, text);
+}
+
+// ButtonDanger : makes a button with some dangerous side effect
+function ButtonDanger(text, fn) {
+    return m("button[type=button]", {
+        onclick: (e) => fn(e), class: "mui-btn mui-btn--raised mui-btn--danger"
+    }, text);
+}
+
+// ButtonAccent : makes a button with the accent color
+function ButtonAccent(text, fn) {
+    return m("button[type=button]", {
+        onclick: (e) => fn(e), class: "mui-btn mui-btn--raised mui-btn--accent"
+    }, text);
 }
 
 // InputComponent: a little more complicated than the others
 function InputComponent(vnode) {
     let object = vnode.attrs.object;
     let prop = vnode.attrs.prop;
+    let label = vnode.attrs.label;
     let type = vnode.attrs.type;
 
     const types = [ "text", "number", "email" ];
@@ -74,19 +103,27 @@ function InputComponent(vnode) {
 
     return {
         view: function(vnode) {
-            return m("input[autocomplete=off]", {
-                value: object[prop],
-                oninput: (e) => {
-                    if (type === "text") {
-                        object[prop] = e.target.value;
-                    } else if (type === "number") {
-                        const strval = e.target.value.replace(/\D/g, "");
-                        object[prop] = parseInt(strval);
-                    } else if (type === "email") {
-                        object[prop] = e.target.value.replace(/ /g, "");
-                    }
-                },
-            });
+            return m("div", { class: "mui-textfield mui-textfield--float-label" }, [
+                m("input", {
+                    autocomplete: "nope",
+                    value: object[prop],
+                    oninput: (e) => {
+                        if (type === "text") {
+                            object[prop] = e.target.value;
+                        } else if (type === "number") {
+                            const strval = e.target.value.replace(/\D/g, "");
+                            if (strval === "") {
+                                object[prop] = null;
+                            } else {
+                                object[prop] = parseInt(strval);
+                            }
+                        } else if (type === "email") {
+                            object[prop] = e.target.value.replace(/ /g, "");
+                        }
+                    },
+                }),
+                m("label", label)
+            ]);
         }
     };
 }
@@ -95,6 +132,7 @@ function InputComponent(vnode) {
 function TextAreaComponent(vnode) {
     let object = vnode.attrs.object;
     let prop = vnode.attrs.prop;
+    let label = vnode.attrs.label;
 
     let cols = vnode.attrs.cols;
     let rows = vnode.attrs.rows;
@@ -112,16 +150,19 @@ function TextAreaComponent(vnode) {
 
     return {
         view: function(vnode) {
-            return m(`textarea`, {
-                cols: cols,
-                rows: rows,
-                maxlength: maxlen,
+            return m("div", { class: "mui-textfield mui-textfield--float-label" }, [
+                m(`textarea`, {
+                    cols: cols,
+                    rows: rows,
+                    maxlength: maxlen,
 
-                value: object[prop],
-                oninput: (e) => {
-                    object[prop] = e.target.value;
-                },
-            });
+                    value: object[prop],
+                    oninput: (e) => {
+                        object[prop] = e.target.value;
+                    },
+                }),
+                m("label", label)
+            ]);
         }
     };
 }
@@ -140,10 +181,7 @@ function ListComponent(vnode) {
         type = "ul";
     }
 
-    const add_btn = m("button[type=button]", {
-        // add a new item at the end of the list
-        onclick: () => list.push("")
-    }, "+");
+    const add = ButtonPrimary("+", () => list.push(""));
 
     const viewfn = function(innervnode) {
         const items = list.map((e, i, a) => {
@@ -158,24 +196,23 @@ function ListComponent(vnode) {
             const is_last = i === a.length - 1;
 
             const content = m("input", {
+                autocomplete: "nope",
                 value: a[i],
                 oninput: (e) => a[i] = e.target.value,
             });
 
-            const sub_btn = m("button[type=button]", {
-                onclick: () => list.splice(i, 1)
-            }, "-");
+            const sub = ButtonAccent("-", () => list.splice(i, 1));
 
             let controls = [ content ];
 
             if (a.length > 1) {
-                controls.push(sub_btn);
+                controls.push(sub);
             }
 
             return m("li", controls);
         });
 
-        let controls = [ items, add_btn ];
+        let controls = [ items, add ];
 
         return m(type, controls);
     }
@@ -185,15 +222,28 @@ function ListComponent(vnode) {
     };
 }
 
-// MenuComponent
+// MenuComponent : draws the menu at the top(ish) of the screen
 function MenuComponent(vnode) {
     return {
         view: function(vnode) {
-            return m("nav", [
-                m(m.route.Link, { href: "/" }, "Home"),
-                m(m.route.Link, { href: "/recipe/new" }, "New Recipe"),
-                m(m.route.Link, { href: "/search" }, "Search"),
-            ]);
+            return m("div", { class: "mui-appbar", style: "padding: 0 2em" }, 
+                m("table", { width: "100%" },
+                    m("tr", { style: "vertical-align:middle" }, [
+
+                        m("td", { class: "mui--appbar-height" }, m("a", {
+                            onclick: (e) => m.route.set("/"), style: "color: white" }, "Home")
+                        ),
+
+                        m("td", { class: "mui--appbar-height" }, m("a", {
+                            onclick: (e) => m.route.set("/recipe/new"), style: "color: white" }, "New Recipe")
+                        ),
+
+                        m("td", { class: "mui--appbar-height", align: "right" }, m("a",
+                                { onclick: (e) => m.route.set("/search"), style: "color: white" }, "Search")
+                        ),
+                    ])
+                )
+            );
         }
     };
 }
@@ -262,17 +312,13 @@ class Recipe {
     // submit : attempts to submit the current object to the backend
     submit() {
         if (this.isValid()) {
-            m.request({
+            return m.request({
                 method: "POST",
                 url: `/api/v1/recipe`,
                 body: this
-            }).then((x) => {
-                console.log(x);
-            }).catch((err) => {
-                console.error(err);
             });
         } else {
-            console.error("this is invalid!");
+            return Promise.reject(new Error(`cannot submit a recipe that is invalid!`));
         }
     }
 
@@ -357,23 +403,23 @@ function RecipeEditComponent(vnode) {
         view: function(vnode) {
             // testing just with the name
             let name_ctrl = m(InputComponent, {
-                object: recipe, prop: "name",
+                object: recipe, prop: "name", label: "Name"
             });
 
             let cook_time_ctrl = m(InputComponent, {
-                object: recipe, prop: "cook_time", type: "number",
+                object: recipe, prop: "cook_time", type: "number", label: "Cook Time (Minutes)"
             });
 
             let prep_time_ctrl = m(InputComponent, {
-                object: recipe, prop: "prep_time", type: "number",
+                object: recipe, prop: "prep_time", type: "number", label: "Prep Time (Minutes)"
             });
 
             let servings_ctrl = m(InputComponent, {
-                object: recipe, prop: "servings", type: "number",
+                object: recipe, prop: "servings", type: "number", label: "Servings"
             });
 
             let notes_ctrl = m(TextAreaComponent, {
-                object: recipe, prop: "note", rows: 15, cols: 100
+                object: recipe, prop: "note", rows: 15, cols: 100, maxlen: 256, label: "Notes"
             });
 
             let ingredients_ctrl = m(ListComponent, {
@@ -390,11 +436,20 @@ function RecipeEditComponent(vnode) {
 
             let log_button = Button("Dump Object State", (e) => console.log(recipe));
 
-            let submit_button = Button("Submit", (e) => recipe.submit());
+            let submit_button = ButtonPrimary(recipe.id !== undefined ? "Save" : "Create",
+                (e) => {
+                    recipe.submit()
+                        .then((x) => {
+                            console.log(x);
+                            m.route.set(`/recipe/${x.id}`);
+                        })
+                        .catch((err) => console.error(err));
+                }
+            );
 
             let cancel_button = Button("Cancel", (e) => m.route.set("/"));
 
-            let delete_button = Button("Delete", (e) => {
+            let delete_button = ButtonDanger("Delete", (e) => {
                 recipe.remove()
                     .then(() => m.route.set("/"))
                     .catch((x) => console.error(x));
@@ -405,18 +460,22 @@ function RecipeEditComponent(vnode) {
 
                 H3(id ? recipe.name : "New Recipe"),
 
-                DIV([
-                    H4("Name"), name_ctrl,
-                    H4("Cook Time"), cook_time_ctrl,
-                    H4("Prep Time"), prep_time_ctrl,
-                    H4("Servings"), servings_ctrl,
+                m("div", { class: "mui-container-fluid" }, [
+                    m("div", { class: "mui-row" }, [
+                        m("div", { class: "mui-col-md-12" }, name_ctrl)
+                    ]),
+                    m("div", { class: "mui-row" }, [
+                        m("div", { class: "mui-col-md-4" }, cook_time_ctrl),
+                        m("div", { class: "mui-col-md-4" }, prep_time_ctrl),
+                        m("div", { class: "mui-col-md-4" }, servings_ctrl),
+                    ]),
                     H4("Ingredients"), ingredients_ctrl,
                     H4("Steps"), steps_ctrl,
                     H4("Tags"), tags_ctrl,
-                    H4("Notes"), notes_ctrl,
+                    notes_ctrl,
 
                     DIV([ log_button, submit_button, cancel_button, delete_button ])
-                ]),
+                ])
             ];
         }
     }
@@ -442,10 +501,6 @@ function HomeComponent(vnode) {
         view: function(vnode) {
             return m("main", [
                 m(MenuComponent),
-                m("h1", { class: "title" }, "Recipe Website"),
-                m("p", "This is the recipe website"),
-                m("button", { onclick: function() { count++; }}, count + " clicks"),
-                m("br"),
                 m("button", {
                     onclick: function () { m.route.set("/newuser"); }
                 }, "New User Page!"),

@@ -5,20 +5,8 @@
  * Recipe Webiste CSS
  */
 
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans&display=swap');
-
-:root {
-    --color-1: #50ffb1;
-    --color-2: #4fb286;
-    --color-3: #3c896d;
-    --color-4: #546d64;
-    --color-5: #4d685a;
-
-    --color-bg: #dadada;
-}
-
-.container {
-    background-color: var(--color-bg);
-    font-family: 'Noto', sans-serif;
+textarea {
+    /* prevents resizing horizontally */
+    resize: vertical;
 }
 
