@@ -9,7 +9,7 @@
 
 #include <sodium.h>
 #include <math.h>
-#include "cJSON.h"
+#include <jansson.h>
 
 #include "recipe.h"
 #include "objects.h"
@@ -500,181 +500,178 @@ int recipe_validation(struct Recipe *recipe)
 static struct Recipe *recipe_from_json(char *s)
 {
 	struct Recipe *recipe;
-	cJSON *json;
-
-	cJSON *id;
-	cJSON *name;
-	cJSON *servings;
-	cJSON *prep_time;
-	cJSON *cook_time;
-	cJSON *note;
-
-	cJSON *ingredients;
-	cJSON *ingredient;
-
-	cJSON *steps;
-	cJSON *step;
-
-	cJSON *tags;
-	cJSON *tag;
-
+	json_t *root;
+	json_error_t error;
 	size_t i;
 
-	recipe = NULL;
-	json = NULL;
+	root = json_loads(s, 0, &error);
+	if (root == NULL) {
+		return NULL;
+	}
+
+	if (!json_is_object(root)) {
+		json_decref(root);
+		return NULL;
+	}
+
+	json_t *name, *prep_time, *cook_time, *servings, *note;
+
+	// get all of the regular values first
+	name = json_object_get(root, "name");
+	if (!json_is_string(name)) {
+		json_decref(root);
+		return NULL;
+	}
+
+	prep_time = json_object_get(root, "prep_time");
+	if (!json_is_integer(prep_time)) {
+		json_decref(root);
+		return NULL;
+	}
+
+	cook_time = json_object_get(root, "cook_time");
+	if (!json_is_integer(cook_time)) {
+		json_decref(root);
+		return NULL;
+	}
+
+	servings = json_object_get(root, "servings");
+	if (!json_is_integer(servings)) {
+		json_decref(root);
+		return NULL;
+	}
+
+	note = json_object_get(root, "note");
+	if (!json_is_string(note)) {
+		json_decref(root);
+		return NULL;
+	}
+
+	json_t *ingredients;
+	json_t *steps;
+	json_t *tags;
+
+	ingredients = json_object_get(root, "ingredients");
+	if (!json_is_array(ingredients) || json_array_size(ingredients) > ARRSIZE(recipe->ingredients)) {
+		json_decref(root);
+		return NULL;
+	}
+
+	steps = json_object_get(root, "steps");
+	if (!json_is_array(steps) || json_array_size(steps) > ARRSIZE(recipe->steps)) {
+		json_decref(root);
+		return NULL;
+	}
+
+	tags = json_object_get(root, "tags");
+	if (!json_is_array(tags) || json_array_size(tags) > ARRSIZE(recipe->tags)) {
+		json_decref(root);
+		return NULL;
+	}
 
 	recipe = calloc(1, sizeof(*recipe));
 	if (recipe == NULL) {
-		goto bail;
+		json_decref(root);
+		return NULL;
 	}
 
-	json = cJSON_Parse(s);
-	if (json == NULL) {
-		goto bail;
+	// now that we have handles to all of the pieces of our recipe object, we should be
+	// able to take all of those, and get them into our regular C structure
+	recipe->name = strdup(json_string_value(name));
+	recipe->prep_time = json_integer_value(prep_time);
+	recipe->cook_time = json_integer_value(cook_time);
+	recipe->servings = json_integer_value(servings);
+	recipe->note = strdup(json_string_value(note));
+
+	for (i = 0; i < json_array_size(ingredients); i++) {
+		json_t *ingredient;
+		ingredient = json_array_get(ingredients, i);
+
+		// TODO (Brian): What the hell do we do if / when we get an array element that isn't a
+		// string? That's a thinker.
+
+		recipe->ingredients[i] = strdup(json_string_value(ingredient));
 	}
 
-	id = cJSON_GetObjectItemCaseSensitive(json, "id");
-	if (cJSON_IsNumber(id)) {
-		recipe->id = (s64)cJSON_GetNumberValue(id);
-	} else {
-		recipe->id = -1;
+	recipe->ingredients_len = i;
+
+	for (i = 0; i < json_array_size(steps); i++) {
+		json_t *step;
+		step = json_array_get(steps, i);
+
+		// TODO (Brian): What the hell do we do if / when we get an array element that isn't a
+		// string? That's a thinker.
+
+		recipe->steps[i] = strdup(json_string_value(step));
 	}
 
-	name = cJSON_GetObjectItemCaseSensitive(json, "name");
-	if (cJSON_IsString(name) && (name->valuestring != NULL)) {
-		recipe->name = strdup(cJSON_GetStringValue(name));
+	recipe->steps_len = i;
+
+	for (i = 0; i < json_array_size(tags); i++) {
+		json_t *tag;
+		tag = json_array_get(tags, i);
+
+		// TODO (Brian): What the hell do we do if / when we get an array element that isn't a
+		// string? That's a thinker.
+
+		recipe->tags[i] = strdup(json_string_value(tag));
 	}
 
-	prep_time = cJSON_GetObjectItemCaseSensitive(json, "prep_time");
-	if (cJSON_IsNumber(prep_time)) {
-		recipe->prep_time = (s64)cJSON_GetNumberValue(prep_time);
-	} else {
-		recipe->prep_time = -1;
-	}
+	recipe->tags_len = i;
 
-	cook_time = cJSON_GetObjectItemCaseSensitive(json, "cook_time");
-	if (cJSON_IsNumber(cook_time)) {
-		recipe->cook_time = (s64)cJSON_GetNumberValue(cook_time);
-	} else {
-		recipe->cook_time = -1;
-	}
-
-	servings = cJSON_GetObjectItemCaseSensitive(json, "servings");
-	if (cJSON_IsNumber(servings)) {
-		recipe->servings = (s64)cJSON_GetNumberValue(servings);
-	} else {
-		recipe->servings = -1;
-	}
-
-	note = cJSON_GetObjectItemCaseSensitive(json, "note");
-	if (cJSON_IsString(note) && (note->valuestring != NULL)) {
-		recipe->note = strdup(cJSON_GetStringValue(note));
-	}
-
-	ingredients = cJSON_GetObjectItemCaseSensitive(json, "ingredients");
-	cJSON_ArrayForEach(ingredient, ingredients)
-	{
-		if (recipe->ingredients_len >= ARRSIZE(recipe->ingredients)) {
-			break;
-		}
-		recipe->ingredients[recipe->ingredients_len++] = strdup(cJSON_GetStringValue(ingredient));
-	}
-
-	steps = cJSON_GetObjectItemCaseSensitive(json, "steps");
-	cJSON_ArrayForEach(step, steps)
-	{
-		if (recipe->steps_len >= ARRSIZE(recipe->steps)) {
-			break;
-		}
-		recipe->steps[recipe->steps_len++] = strdup(cJSON_GetStringValue(step));
-	}
-
-	tags = cJSON_GetObjectItemCaseSensitive(json, "tags");
-	cJSON_ArrayForEach(tag, tags)
-	{
-		if (recipe->tags_len >= ARRSIZE(recipe->tags)) {
-			break;
-		}
-		recipe->tags[recipe->tags_len++] = strdup(cJSON_GetStringValue(tag));
-	}
-
-	cJSON_Delete(json);
+	json_decref(root);
 
 	return recipe;
-
-bail:
-	recipe_free(recipe);
-	cJSON_Delete(json);
-	return NULL;
 }
 
 // recipe_to_json : converts a Recipe to a JSON string
 static char *recipe_to_json(struct Recipe *recipe)
 {
+	json_t *object;
+	json_t *ingredients;
+	json_t *steps;
+	json_t *tags;
+	json_error_t error;
 	char *s;
-	size_t i, size, used;
+	size_t i;
 
-	size = BUFLARGE * 2;
-	used = 0;
+	// we have to setup the arrays of junk first
 
-	s = calloc(size, sizeof(*s));
-
-#include "json_print_macros.h"
-
-	BEGIN();
-
-	ADDSTR("name", recipe->name);
-	ADDCOM();
-	ADDNUM("id", recipe->id);
-	ADDCOM();
-	ADDNUM("cook_time", recipe->cook_time);
-	ADDCOM();
-	ADDNUM("prep_time", recipe->prep_time);
-	ADDCOM();
-	ADDNUM("servings",  recipe->servings);
-	ADDCOM();
-	ADDSTR("note", recipe->note);
-	ADDCOM();
-
-	ARRBEG("ingredients");
-
-	for (i = 0; i < ARRSIZE(recipe->ingredients) && recipe->ingredients[i] != NULL; i++) {
-		ARRVAL("\"%s\"", recipe->ingredients[i]);
-		if (i + 1 < ARRSIZE(recipe->ingredients) && recipe->ingredients[i + 1] != NULL)
-			ADDCOM();
+	ingredients = json_array();
+	for (i = 0; i < recipe->ingredients_len; i++) {
+		json_array_append_new(ingredients, json_string(recipe->ingredients[i]));
 	}
 
-	ARREND();
-
-	ADDCOM();
-
-	ARRBEG("steps");
-
-	for (i = 0; i < ARRSIZE(recipe->steps) && recipe->steps[i] != NULL; i++) {
-		ARRVAL("\"%s\"", recipe->steps[i]);
-		if (i + 1 < ARRSIZE(recipe->steps) && recipe->steps[i + 1] != NULL)
-			ADDCOM();
+	steps = json_array();
+	for (i = 0; i < recipe->steps_len; i++) {
+		json_array_append_new(steps, json_string(recipe->steps[i]));
 	}
 
-	ARREND();
-
-	ADDCOM();
-
-	ARRBEG("tags");
-
-	for (i = 0; i < ARRSIZE(recipe->tags) && recipe->tags[i] != NULL; i++) {
-		ARRVAL("\"%s\"", recipe->tags[i]);
-		if (i + 1 < ARRSIZE(recipe->tags) && recipe->tags[i + 1] != NULL)
-			ADDCOM();
+	tags = json_array();
+	for (i = 0; i < recipe->tags_len; i++) {
+		json_array_append_new(tags, json_string(recipe->tags[i]));
 	}
 
-	ARREND();
+	object = json_pack_ex(
+		&error, 0,
+		"{s:s, s:i, s:i, s:i, s:s, s:o, s:o, s:o}",
+		"name", recipe->name,
+		"prep_time", recipe->prep_time,
+		"cook_time", recipe->cook_time,
+		"servings", recipe->servings,
+		"note", recipe->note,
+		"ingredients", ingredients,
+		"steps", steps,
+		"tags", tags
+	);
 
-	END();
+	if (object == NULL) {
+		fprintf(stderr, "%s %d\n", error.text, error.position);
+	}
 
-#include "json_print_macros.h"
+	s = json_dumps(object, 0);
 
-	assert(used < size);
+	json_decref(object);
 
 	return s;
 }

@@ -1,5 +1,5 @@
 CC=cc
-LINKER=-ldl -lpthread -lm -lmagic -lsodium
+LINKER=-ldl -lpthread -lm -lmagic -lsodium -ljansson
 CFLAGS=-fPIC -Wall -g3 -march=native
 TARGET=./recipe
 
