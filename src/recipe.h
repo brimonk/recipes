@@ -27,33 +27,26 @@ struct Recipe {
 	char *note;
 };
 
-// RecipeSearchQuery : contains the properties you're allowed to search for
-struct RecipeSearchQuery {
-	size_t siz; // page size (up to 100, common sizes are 10, 20, 25, 50, 100)
-	size_t num; // page number
+// RecipeResultRecord : one result from a RecipeSearch
+struct RecipeResultRecord {
+	char name[128];
+	int prep_time;
+	int cook_time;
+	int servings;
+};
+
+// RecipeResultRecords : an aggregation of results from a search
+struct RecipeResultRecords {
+	struct RecipeResultRecord *records;
+	size_t records_len, records_cap;
+};
+
+// SearchQuery : contains the properties you're allowed to search for
+struct SearchQuery {
+	size_t page_size;   // page size (up to 100, common sizes are 10, 20, 25, 50, 100)
+	size_t page_number; // page number [1 - N)
 	char *text; // the text of a user's search
 };
-
-struct RecipeSearchResult {
-	recipe_id id;
-};
-
-// 
-typedef struct RecipeSearch {
-	recipe_id id;
-} RecipeSearch;
-
-// search_t : the results of a search query (we only search on one thing in this app)
-typedef struct search_t {
-	// request
-	char query[BUFSMALL];
-
-	int type; // record type (RT_*)
-
-	// response
-	u64 id[MAX_LIST_RESULTS]; // we support up to 100 response items
-	size_t cnt;
-} search_t;
 
 // recipe_api_post : endpoint, POST - /api/v1/recipe
 int recipe_api_post(struct http_request_s *req, struct http_response_s *res);

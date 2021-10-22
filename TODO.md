@@ -15,6 +15,14 @@
 
 ### Search
 
+* Do something good for the pre-loading of an ass-load of recipes.
+
+### Images
+
+* How are we doing to handle image storage?
+    - maybe just file system?
+    - probably individual image records within our file
+
 ## User Interface
 
 * Add UI Limits for Fields

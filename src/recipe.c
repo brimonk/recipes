@@ -39,6 +39,94 @@ static struct Recipe *recipe_from_json(char *s);
 // recipe_to_json : converts a Recipe to a JSON string
 static char *recipe_to_json(struct Recipe *recipe);
 
+// search_results_to_json : converts the search records from memory to JSON
+char *search_results_to_json(struct RecipeResultRecords *records);
+
+// recipe_search_comparator : returns true if the recipe matches the text, false if it doesn't
+int recipe_search_comparator(recipe_id id, char *text);
+
+// recipe_search : fills out a search structure with results
+struct RecipeResultRecords *recipe_search(struct SearchQuery *search);
+
+// search_results_free : frees the recipe result search records
+void search_results_free(struct RecipeResultRecords *records);
+
+// NOTE (Brian): I'm putting this here because I'm not sure where else it's really going to be used.
+// Feel free to move it in the future
+
+typedef struct kvpair {
+	char *k, *v;
+} kvpair;
+
+typedef struct kvpairs {
+	struct kvpair *pairs;
+	size_t pairs_len, pairs_cap;
+} kvpairs;
+
+// http_parse_query_parameters : parses http query parameters into a list of k/v pairs
+struct kvpairs *http_parse_query_parameters(char *s)
+{
+	struct kvpairs *pairs;
+	char *str;
+	size_t i;
+
+	pairs = calloc(1, sizeof(*pairs));
+	if (pairs == NULL) {
+		return NULL;
+	}
+
+	s = strchr(s, '?');
+	if (s == NULL) {
+		return pairs;
+	}
+
+	s++;
+
+	// TODO (Brian): make this reentrant with strtok_r
+	for (i = 0, str = strtok(s, "&="); str != NULL; i++, str = strtok(NULL, "&=")) {
+		C_RESIZE(&pairs->pairs);
+
+		if (i % 2 == 0) {
+			pairs->pairs[pairs->pairs_len].k = strdup(str);
+		} else {
+			pairs->pairs[pairs->pairs_len++].v = strdup(str);
+		}
+	}
+
+	return pairs;
+}
+
+// returns the value for a given key, or NULL if not found
+char *kvpairs_get(kvpairs *pairs, char *key)
+{
+	size_t i;
+
+	assert(pairs != NULL);
+	assert(key != NULL);
+
+	for (i = 0; i < pairs->pairs_len; i++) {
+		if (strcmp(key, pairs->pairs[i].k) == 0) {
+			return pairs->pairs[i].v;
+		}
+	}
+
+	return NULL;
+}
+
+// kvpairs_free : releases memory in the kvpairs structure
+void kvpairs_free(kvpairs *pairs)
+{
+	size_t i;
+
+	for (i = 0; i < pairs->pairs_len; i++) {
+		free(pairs->pairs[i].k);
+		free(pairs->pairs[i].v);
+	}
+
+	free(pairs->pairs);
+	free(pairs);
+}
+
 // recipe_api_post : endpoint, POST - /api/v1/recipe
 int recipe_api_post(struct http_request_s *req, struct http_response_s *res)
 {
@@ -147,36 +235,78 @@ int recipe_api_get(struct http_request_s *req, struct http_response_s *res)
 // recipe_api_getlist : endpoint, GET - /api/v1/recipe/list
 int recipe_api_getlist(struct http_request_s *req, struct http_response_s *res)
 {
-	// NOTE (Brian): parameters from the uri
-	//
-	// siz: page size, positive integer, x > 0
-	// num: page number, positive integer, x > 0
-	// qry: query, text. If not present, just iterates over the available recipes
+	struct SearchQuery query;
+	struct kvpairs *pairs;
+	struct http_string_s http_uri;
+	char *uri;
+	char *json;
 
-#if 0
-	struct http_string_s h_siz, h_num, h_qry;
-	search_t search;
+	memset(&query, 0, sizeof query);
 
-	memset(&search, 0, sizeof search);
+	query.page_size = 20;
+	query.page_number = 0;
+	query.text = NULL;
 
-	search.siz = 20;
-	search.num = 0;
+	http_uri = http_request_target(req);
+	uri = strndup(http_uri.buf, http_uri.len);
 
-	h_siz = http_request_query(req, "siz");
-	if (h_siz.buf != NULL) {
-		search.siz = atol(h_siz.buf);
+	pairs = http_parse_query_parameters(uri);
+
+	free(uri);
+
+	if (pairs == NULL) {
+		ERR("couldn't parse the http query parameter pairs!");
+		free(uri);
+		return -1;
 	}
 
-	h_num = http_request_query(req, "num");
-	if (h_num.buf != NULL) {
-		search.num = atol(h_num.buf);
+	{
+		char *page_size;
+
+		page_size = kvpairs_get(pairs, "siz");
+		if (page_size != NULL) {
+			query.page_size = atol(page_size);
+		}
 	}
 
-	h_qry = http_request_query(req, "qry");
-	if (h_qry.buf != NULL) {
-		strncpy(search.query, h_qry.buf, sizeof(search.query));
+	{
+		char *page_number;
+
+		page_number = kvpairs_get(pairs, "num");
+		if (page_number != NULL) {
+			query.page_number = atol(page_number);
+		}
 	}
-#endif
+
+	// TODO (Brian): We probably have to decode % encoded values into their real values
+	// We'll handle that before we ship, probably.
+
+	{
+		char *text;
+
+		text = kvpairs_get(pairs, "q");
+		if (text != NULL) {
+			query.text = text;
+		}
+	}
+
+	struct RecipeResultRecords *results;
+
+	results = recipe_search(&query);
+
+	json = search_results_to_json(results);
+
+	search_results_free(results);
+
+	http_response_status(res, 200);
+
+	http_response_body(res, json, strlen(json));
+
+	http_respond(req, res);
+
+	free(json);
+
+	kvpairs_free(pairs);
 
 	return 0;
 }
@@ -408,37 +538,98 @@ s64 recipe_delete(s64 id)
 	return 0;
 }
 
-// recipe_search : fills out a search structure with results
-int recipe_search(search_t *search)
+// recipe_search_comparator : returns true if the recipe matches the text, false if it doesn't
+int recipe_search_comparator(recipe_id id, char *text)
 {
-#if 0
 	recipe_t *recipe;
-	tag_t *tag;
-	string_128_t *name, *tagtext;
-	size_t i, rlen, tlen;
+	string_128_t *name;
+	int rc;
+
+	recipe = store_getobj(RT_RECIPE, id);
+	if (recipe == NULL) {
+		return 0;
+	}
+
+	name = store_getobj(RT_STRING128, recipe->name_id);
+	if (name == NULL) {
+		return 0;
+	}
+
+	// NOTE (Brian): GNU doesn't have a strnstr function, so at some point we should probably
+	// write our own.
+
+	char *s;
+
+	s = strndup(name->string, sizeof(name->string));
+
+	rc = strstr(s, text) == NULL;
+
+	free(s);
+
+	return rc;
+}
+
+// recipe_search : fills out a search structure with results
+struct RecipeResultRecords *recipe_search(struct SearchQuery *search)
+{
+	struct RecipeResultRecords *records;
+	recipe_t *recipe;
+	string_128_t *name;
+	size_t i;
 	size_t skip;
+	size_t page_size;
+	size_t page_number;
 
-	assert(search->type == RT_RECIPE);
+	assert(search != NULL);
 
-	skip = search->siz * search->num;
+	records = calloc(1, sizeof(*records));
+	if (records == NULL) {
+		return NULL;
+	}
 
-	rlen = store_getlen(RT_RECIPE);
-	tlen = store_getlen(RT_TAG);
+	page_size = search->page_size;
+	page_number = search->page_number - 1;
 
-	for (i = 0; i < rlen && search->cnt < ARRSIZE(search->id); i++) {
-		recipe = store_getobj(RT_RECIPE, i);
-		assert(recipe != NULL);
+	skip = page_size * page_number;
 
-		name = store_getobj(RT_STRING128, recipe->name_id);
-		assert(name != NULL);
+	// NOTE (Brian):
+	//
+	// For performance speedups, we'll need to compute / store an index to walk instead. For the
+	// moment, we sure do just check every single record. This really doesn't scale too well.
 
-		if (strstr(name->string, search->query) != NULL) {
-			search->id[search->cnt++] = recipe->base.id;
+	for (i = 0; skip > 0; i++) { // skip records that match the query parameters
+		if (recipe_search_comparator((recipe_id)i, search->text)) {
+			skip--;
 		}
 	}
-#endif
 
-	return 0;
+	// NOTE (Brian): Now we get to do our dynamic allocation, to pull back page_size records.
+	records->records_cap = page_size;
+	records->records = calloc(records->records_cap, sizeof(*records->records));
+
+	for (page_size += i; i < page_size; i++) {
+		// NOTE (Brian): Copy the data
+		struct RecipeResultRecord *result;
+
+		recipe = store_getobj(RT_RECIPE, i);
+		if (recipe == NULL) {
+			break;
+		}
+
+		name = store_getobj(RT_STRING128, recipe->name_id);
+		if (name == NULL) { // HOW THE FUCK
+			break;
+		}
+
+		result = records->records + records->records_len++;
+
+		strncpy(result->name, name->string, sizeof(name->string));
+		result->prep_time = recipe->prep_time;
+		result->cook_time = recipe->cook_time;
+		result->servings = recipe->servings;
+	}
+
+	return records;
 }
 
 // recipe_validation : returns non-zero if the input object is invalid
@@ -676,6 +867,33 @@ static char *recipe_to_json(struct Recipe *recipe)
 	return s;
 }
 
+// search_results_to_json : converts the search records from memory to JSON
+char *search_results_to_json(struct RecipeResultRecords *records)
+{
+	size_t i;
+	json_t *array;
+	json_t *object;
+	char *s;
+
+	array = json_array();
+	for (i = 0; i < records->records_len; i++) {
+		object = json_object();
+
+		json_object_set_new(object, "name", json_string(records->records[i].name));
+		json_object_set_new(object, "prep_time", json_integer(records->records[i].prep_time));
+		json_object_set_new(object, "cook_time", json_integer(records->records[i].cook_time));
+		json_object_set_new(object, "servings", json_integer(records->records[i].servings));
+
+		json_array_append_new(array, object);
+	}
+
+	s = json_dumps(array, 0);
+
+	json_decref(array);
+
+	return s;
+}
+
 // recipe_free : frees all of the data in the recipe object
 void recipe_free(struct Recipe *recipe)
 {
@@ -702,5 +920,14 @@ void recipe_free(struct Recipe *recipe)
 
 		free(recipe);
 	}
+}
+
+// search_results_free : frees the recipe result search records
+void search_results_free(struct RecipeResultRecords *records)
+{
+	assert(records != NULL);
+
+	free(records->records);
+	free(records);
 }
 
