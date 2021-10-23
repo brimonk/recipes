@@ -111,7 +111,8 @@ int main(int argc, char **argv)
 int rcheck(struct http_request_s *req, char *target, char *method)
 {
 	struct http_string_s m, t;
-	int i;
+    char *uri;
+	int i, rc;
 
 	if (req == NULL)
 		return 0;
@@ -128,31 +129,27 @@ int rcheck(struct http_request_s *req, char *target, char *method)
 	}
 
 	t = http_request_target(req);
+    uri = strndup(t.buf, t.len);
 
-	if (t.len == 1 && t.buf[0] == '/' && strlen(target) > 1)
-		return 0;
+    if (strchr(uri, '?')) {
+        (*strchr(uri, '?')) = 0;
+    }
 
-	// determine if we have query parameters, and what the "real length" of t is
-	for (i = 0; i < t.len && t.buf[i] != '?'; i++)
-		;
+    rc = 1;
 
-	// NOTE (Brian): I bet this is the thing we don't want.
-	// This logic probably needs to be replaced with like, some integer, query param checking
-	// stuff.
-	//
-	// If something's fishy with 'rcheck', it's this issue that you have to look into.
-#if 0
-	if (strlen(target) != i)
-		return 0;
-#endif
+    if (strlen(uri) != strlen(target)) {
+        rc = 0;
+    }
 
-	// stop checking the target before query parameters
-	for (i = 0; i < t.len && i < strlen(target) && target[i] != '?'; i++) {
-		if (tolower(t.buf[i]) != tolower(target[i]))
-			return 0;
-	}
+    for (i = 0; rc && i < strlen(uri) && i < strlen(target); i++) {
+        if (tolower(uri[i]) != tolower(target[i])) {
+            rc = 0;
+        }
+    }
 
-	return 1;
+    free(uri);
+
+	return rc;
 }
 
 // request_handler: the http request handler

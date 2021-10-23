@@ -67,8 +67,9 @@ typedef struct kvpairs {
 struct kvpairs *http_parse_query_parameters(char *s)
 {
 	struct kvpairs *pairs;
-	char *str;
-	size_t i;
+	char *arr[128];
+	char *k, *v;
+	size_t i, len;
 
 	pairs = calloc(1, sizeof(*pairs));
 	if (pairs == NULL) {
@@ -77,20 +78,55 @@ struct kvpairs *http_parse_query_parameters(char *s)
 
 	s = strchr(s, '?');
 	if (s == NULL) {
-		return pairs;
+		return pairs; // empty
 	}
 
-	s++;
+	memset(&arr, 0, sizeof arr);
 
-	// TODO (Brian): make this reentrant with strtok_r
-	for (i = 0, str = strtok(s, "&="); str != NULL; i++, str = strtok(NULL, "&=")) {
+	// NOTE (Brian): track the interesting chars you see, we'll deal with them a little later,
+	// because we can return NOTHING if you don't send me the correct pairs of items.
+	for (i = 0; *s && i < ARRSIZE(arr); s++) {
+		switch (*s) {
+			case '?':
+			case '&':
+			case '=':
+				arr[i++] = s;
+				break;
+			default:
+				break;
+		}
+	}
+
+	if (i % 2 != 0) {
+		return pairs; // still empty
+	}
+
+	len = i;
+
+	for (i = 0; i < len; i += 2) {
+		size_t klen, vlen;
+
 		C_RESIZE(&pairs->pairs);
 
-		if (i % 2 == 0) {
-			pairs->pairs[pairs->pairs_len].k = strdup(str);
-		} else {
-			pairs->pairs[pairs->pairs_len++].v = strdup(str);
+		k = arr[i + 0] + 1;
+		v = arr[i + 1] + 1;
+
+		klen = strcspn(k, "?=&");
+		vlen = strcspn(v, "?=&");
+
+		if (klen == 0) {
+			continue;
 		}
+
+		pairs->pairs[pairs->pairs_len].k = strndup(k, klen);
+
+		if (vlen == 0) {
+			pairs->pairs[pairs->pairs_len].v = NULL;
+		} else {
+			pairs->pairs[pairs->pairs_len].v = strndup(v, vlen);
+		}
+
+		pairs->pairs_len++;
 	}
 
 	return pairs;
@@ -545,14 +581,22 @@ int recipe_search_comparator(recipe_id id, char *text)
 	string_128_t *name;
 	int rc;
 
+	if (text == NULL) {
+		text = "";
+	}
+
+	if (strlen(text) == 0) {
+		return 1;
+	}
+
 	recipe = store_getobj(RT_RECIPE, id);
 	if (recipe == NULL) {
-		return 0;
+		return -1;
 	}
 
 	name = store_getobj(RT_STRING128, recipe->name_id);
 	if (name == NULL) {
-		return 0;
+		return -1;
 	}
 
 	// NOTE (Brian): GNU doesn't have a strnstr function, so at some point we should probably
@@ -562,7 +606,7 @@ int recipe_search_comparator(recipe_id id, char *text)
 
 	s = strndup(name->string, sizeof(name->string));
 
-	rc = strstr(s, text) == NULL;
+	rc = strstr(s, text) != NULL;
 
 	free(s);
 
@@ -579,6 +623,7 @@ struct RecipeResultRecords *recipe_search(struct SearchQuery *search)
 	size_t skip;
 	size_t page_size;
 	size_t page_number;
+	int rc;
 
 	assert(search != NULL);
 
@@ -588,7 +633,7 @@ struct RecipeResultRecords *recipe_search(struct SearchQuery *search)
 	}
 
 	page_size = search->page_size;
-	page_number = search->page_number - 1;
+	page_number = search->page_number;
 
 	skip = page_size * page_number;
 
@@ -598,7 +643,12 @@ struct RecipeResultRecords *recipe_search(struct SearchQuery *search)
 	// moment, we sure do just check every single record. This really doesn't scale too well.
 
 	for (i = 0; skip > 0; i++) { // skip records that match the query parameters
-		if (recipe_search_comparator((recipe_id)i, search->text)) {
+		rc = recipe_search_comparator((recipe_id)i, search->text);
+		if (rc < 0) {
+			return records;
+		}
+
+		if (rc > 0) {
 			skip--;
 		}
 	}
@@ -611,6 +661,7 @@ struct RecipeResultRecords *recipe_search(struct SearchQuery *search)
 		// NOTE (Brian): Copy the data
 		struct RecipeResultRecord *result;
 
+		// NOTE (Brian): these are pointer fetches, so they should always be pretty quick...
 		recipe = store_getobj(RT_RECIPE, i);
 		if (recipe == NULL) {
 			break;
@@ -621,12 +672,20 @@ struct RecipeResultRecords *recipe_search(struct SearchQuery *search)
 			break;
 		}
 
-		result = records->records + records->records_len++;
+		rc = recipe_search_comparator(i, search->text);
 
-		strncpy(result->name, name->string, sizeof(name->string));
-		result->prep_time = recipe->prep_time;
-		result->cook_time = recipe->cook_time;
-		result->servings = recipe->servings;
+		if (rc < 0) {
+			return records;
+		}
+
+		if (rc > 0) {
+			result = records->records + records->records_len++;
+
+			strncpy(result->name, name->string, sizeof(name->string));
+			result->prep_time = recipe->prep_time;
+			result->cook_time = recipe->cook_time;
+			result->servings = recipe->servings;
+		}
 	}
 
 	return records;

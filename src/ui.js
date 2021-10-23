@@ -481,13 +481,59 @@ function RecipeEditComponent(vnode) {
     }
 };
 
-// SearchComponent: 
+// SearchComponent: handles the searching of recipes
 function SearchComponent(vnode) {
+    let results = [];
+
+    // NOTE (Brian): we probably want a semi-smart way of handling these default values
+
+    const query = {
+        text: "",
+        pageSize: 20,
+        pageNumber: 0,
+    };
+
+    const doSearch = () => {
+        // TODO (Brian): we need to have optional parameter things in here
+        // Like, you shouldn't always have to send pageSize, or pageNumber
+        const qString = `q=${query.text}&siz=${query.pageSize}&num=${query.pageNumber}`;
+
+        return m.request({
+            method: "GET",
+            url: `/api/v1/recipe/list?${qString}`,
+        })
+    };
+
+    const enterHandler = () => {
+        doSearch().then((x) => {
+            results = x;
+            console.log(results);
+            m.redraw();
+        }).catch((err) => {
+            console.error(err);
+        });
+    };
+
+    enterHandler(); // like we performed a blank search at the start of the page
+
     return {
         view: function(vnode) {
             return [
-                m(MenuComponent),
-                m("h3", "Search Page"),
+                m("div", { class: "mui-textfield mui-textfield--float-label" }, [
+                    m("input", {
+                        autocomplete: "nope",
+                        value: query.text,
+                        oninput: (e) => {
+                            query.text = e.target.value;
+                        },
+                        onkeyup: (e) => {
+                            if (e.key === "Enter" || e.keycode === 113) {
+                                enterHandler();
+                            }
+                        }
+                    }),
+                    m("label", "Search for a Recipe...")
+                ])
             ];
         }
     }
@@ -501,6 +547,7 @@ function HomeComponent(vnode) {
         view: function(vnode) {
             return m("main", [
                 m(MenuComponent),
+                /*
                 m("button", {
                     onclick: function () { m.route.set("/newuser"); }
                 }, "New User Page!"),
@@ -508,6 +555,9 @@ function HomeComponent(vnode) {
                 m("button", {
                     onclick: function () { m.route.set("/login"); }
                 }, "Login!"),
+                */
+
+                m(SearchComponent)
             ]);
         }
     };
