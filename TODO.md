@@ -34,3 +34,10 @@
                    0/22
 ```
 
+### User Stuff
+
+* User Creation needs to be updated (for the new structure)
+* User Session management needs to be updated
+* New User form needs to be updated
+* Login form needs to be updated
+

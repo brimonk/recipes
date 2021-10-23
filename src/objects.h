@@ -50,6 +50,12 @@ typedef struct user_t {
 
 typedef u64 user_id;
 
+// usersession_t : a (hopefully) 1:1 mapping with the user table, everyone only gets one session
+typedef struct usersession_t {
+    objectbase_t base;
+    string_128_id secret;
+} usersession_t;
+
 // recipe_id : the pk for a recipe item (just a u64 that's the array offset)
 typedef u64 recipe_id;
 
