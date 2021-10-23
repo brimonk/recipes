@@ -230,17 +230,17 @@ function MenuComponent(vnode) {
                 m("table", { width: "100%" },
                     m("tr", { style: "vertical-align:middle" }, [
 
-                        m("td", { class: "mui--appbar-height" }, m("a", {
-                            onclick: (e) => m.route.set("/"), style: "color: white" }, "Home")
-                        ),
+                        m("td", { class: "mui--appbar-height" }, m(m.route.Link, {
+                            href: "/", style: "color: white"
+                        }, "Home")),
 
-                        m("td", { class: "mui--appbar-height" }, m("a", {
-                            onclick: (e) => m.route.set("/recipe/new"), style: "color: white" }, "New Recipe")
-                        ),
+                        m("td", { class: "mui--appbar-height" }, m(m.route.Link, {
+                            href: "/recipe/new", style: "color: white"
+                        }, "New Recipe")),
 
-                        m("td", { class: "mui--appbar-height", align: "right" }, m("a",
-                                { onclick: (e) => m.route.set("/search"), style: "color: white" }, "Search")
-                        ),
+                        m("td", { class: "mui--appbar-height", align: "right" }, m(m.route.Link, {
+                            href: "/search", style: "color: white"
+                        }, "Search")),
                     ])
                 )
             );
@@ -545,7 +545,9 @@ function SearchComponent(vnode) {
                 m("tbody",
                     results.map((e) => {
                         return m("tr", [
-                            m("td", e.name),
+                            m("td", m(m.route.Link, {
+                                href: `/recipe/${e.id}`
+                            }, e.name)),
                             m("td", e.prep_time),
                             m("td", e.cook_time),
                             m("td", e.servings),

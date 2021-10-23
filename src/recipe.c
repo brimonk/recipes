@@ -681,6 +681,7 @@ struct RecipeResultRecords *recipe_search(struct SearchQuery *search)
 		if (rc > 0) {
 			result = records->records + records->records_len++;
 
+            result->id = recipe->base.id;
 			strncpy(result->name, name->string, sizeof(name->string));
 			result->prep_time = recipe->prep_time;
 			result->cook_time = recipe->cook_time;
@@ -938,6 +939,7 @@ char *search_results_to_json(struct RecipeResultRecords *records)
 	for (i = 0; i < records->records_len; i++) {
 		object = json_object();
 
+		json_object_set_new(object, "id", json_integer(records->records[i].id));
 		json_object_set_new(object, "name", json_string(records->records[i].name));
 		json_object_set_new(object, "prep_time", json_integer(records->records[i].prep_time));
 		json_object_set_new(object, "cook_time", json_integer(records->records[i].cook_time));

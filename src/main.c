@@ -131,20 +131,20 @@ int rcheck(struct http_request_s *req, char *target, char *method)
 	t = http_request_target(req);
     uri = strndup(t.buf, t.len);
 
-    if (strchr(uri, '?')) {
+    if (strchr(uri, '?') != NULL) {
         (*strchr(uri, '?')) = 0;
     }
 
     rc = 1;
 
-    if (strlen(uri) != strlen(target)) {
-        rc = 0;
-    }
-
     for (i = 0; rc && i < strlen(uri) && i < strlen(target); i++) {
         if (tolower(uri[i]) != tolower(target[i])) {
             rc = 0;
         }
+    }
+
+    if (i != strlen(target)) {
+        rc = 0;
     }
 
     free(uri);
@@ -185,12 +185,12 @@ void request_handler(struct http_request_s *req)
 		rc = recipe_api_post(req, res);
 		CHKERR(503);
 
-	} else if (rcheck(req, "/api/v1/recipe", "GET")) {
-		rc = recipe_api_get(req, res);
-		CHKERR(503);
-
 	} else if (rcheck(req, "/api/v1/recipe/list", "GET")) {
 		rc = recipe_api_getlist(req, res);
+		CHKERR(503);
+
+	} else if (rcheck(req, "/api/v1/recipe", "GET")) {
+		rc = recipe_api_get(req, res);
 		CHKERR(503);
 
 	} else if (rcheck(req, "/api/v1/recipe", "PUT")) {

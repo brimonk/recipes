@@ -29,6 +29,7 @@ struct Recipe {
 
 // RecipeResultRecord : one result from a RecipeSearch
 struct RecipeResultRecord {
+    recipe_id id;
 	char name[128];
 	int prep_time;
 	int cook_time;
