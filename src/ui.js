@@ -484,6 +484,7 @@ function RecipeEditComponent(vnode) {
 // SearchComponent: handles the searching of recipes
 function SearchComponent(vnode) {
     let results = [];
+    let isLoading = true;
 
     // NOTE (Brian): we probably want a semi-smart way of handling these default values
 
@@ -493,10 +494,13 @@ function SearchComponent(vnode) {
         pageNumber: 0,
     };
 
+    // doSearch : this function sets up the request and returns a Promise for it
     const doSearch = () => {
         // TODO (Brian): we need to have optional parameter things in here
         // Like, you shouldn't always have to send pageSize, or pageNumber
         const qString = `q=${query.text}&siz=${query.pageSize}&num=${query.pageNumber}`;
+
+        isLoading = true;
 
         return m.request({
             method: "GET",
@@ -504,6 +508,7 @@ function SearchComponent(vnode) {
         })
     };
 
+    // enterHandler : does the searching, and hooks back up the search results
     const enterHandler = () => {
         doSearch().then((x) => {
             results = x;
@@ -511,7 +516,44 @@ function SearchComponent(vnode) {
             m.redraw();
         }).catch((err) => {
             console.error(err);
+        }).finally(() => {
+            isLoading = false;
         });
+    };
+
+    // displayResults : returns the "body" of the component, regardless of what condition the
+    // results are in
+    const displayResults = () => {
+        if (isLoading) {
+            // TODO (Brian): return the loading widget
+            return m("p", "Loading...");
+        }
+
+        if (results.length === 0) {
+            // TODO (Brian): display the no results thing
+            return m("p", "No results!");
+        } else {
+            return m("table", { class: "mui-table" }, [
+                m("thead", [
+                    m("tr", [
+                        m("th", "Name"),
+                        m("th", "Prep Time"),
+                        m("th", "Cook Time"),
+                        m("th", "Servings"),
+                    ])
+                ]),
+                m("tbody",
+                    results.map((e) => {
+                        return m("tr", [
+                            m("td", e.name),
+                            m("td", e.prep_time),
+                            m("td", e.cook_time),
+                            m("td", e.servings),
+                        ]);
+                    })
+                )
+            ])
+        }
     };
 
     enterHandler(); // like we performed a blank search at the start of the page
@@ -533,7 +575,8 @@ function SearchComponent(vnode) {
                         }
                     }),
                     m("label", "Search for a Recipe...")
-                ])
+                ]),
+                displayResults()
             ];
         }
     }
