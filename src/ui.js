@@ -1,16 +1,7 @@
 // Brian Chrzanowski
 // 2021-09-07 01:17:08
-//
-// There are a few interesting things you should know about the application.
-//
-// Basically, all of the form elements that revolve around using and setting data in a form all have
-// a backing data structure / class that has all of the smarts for the form.
-//
-// As an example, the Recipe class has an 'errors' object inside of it, with the errors for every
-// single field as they apply. When the 'InputComponent' creates itself, it reads from that 'errors'
-// object, and determines if it needs to print out an error below the input, for example.
 
-const email_re = /^(([^<>()[\]\\.,;:\s@\"]+(\.[^<>()[\]\\.,;:\s@\"]+)*)|(\".+\"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;
+const EMAIL_REGEX = /^(([^<>()[\]\\.,;:\s@\"]+(\.[^<>()[\]\\.,;:\s@\"]+)*)|(\".+\"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;
 
 const COOKIE_DISCLAIMER = `For legal reasons, you need to accept the fact that this site requires 1
 session cookie for all operations where you might create new content.  It is impossible to opt-out
@@ -91,7 +82,7 @@ function InputComponent(vnode) {
     let label = vnode.attrs.label;
     let type = vnode.attrs.type;
 
-    const types = [ "text", "number", "email" ];
+    const types = [ "text", "number", "email", "password" ];
 
     if (!type) {
         type = "text";
@@ -107,10 +98,9 @@ function InputComponent(vnode) {
                 m("input", {
                     autocomplete: "nope",
                     value: object[prop],
+                    type: type,
                     oninput: (e) => {
-                        if (type === "text") {
-                            object[prop] = e.target.value;
-                        } else if (type === "number") {
+                        if (type === "number") {
                             const strval = e.target.value.replace(/\D/g, "");
                             if (strval === "") {
                                 object[prop] = null;
@@ -119,6 +109,8 @@ function InputComponent(vnode) {
                             }
                         } else if (type === "email") {
                             object[prop] = e.target.value.replace(/ /g, "");
+                        } else {
+                            object[prop] = e.target.value;
                         }
                     },
                 }),
@@ -239,8 +231,8 @@ function MenuComponent(vnode) {
                         }, "New Recipe")),
 
                         m("td", { class: "mui--appbar-height", align: "right" }, m(m.route.Link, {
-                            href: "/search", style: "color: white"
-                        }, "Search")),
+                            href: "/newuser", style: "color: white"
+                        }, "New User / Login")),
                     ])
                 )
             );
@@ -455,6 +447,14 @@ function RecipeEditComponent(vnode) {
                     .catch((x) => console.error(x));
             });
 
+            let buttons = [];
+
+            if (recipe.id === undefined) { // create
+                buttons = [ log_button, submit_button, cancel_button ];
+            } else { // edit
+                buttons = [ log_button, submit_button, cancel_button, delete_button ];
+            }
+
             return [
                 m(MenuComponent),
 
@@ -474,7 +474,7 @@ function RecipeEditComponent(vnode) {
                     H4("Tags"), tags_ctrl,
                     notes_ctrl,
 
-                    DIV([ log_button, submit_button, cancel_button, delete_button ])
+                    DIV(buttons)
                 ])
             ];
         }
@@ -592,16 +592,6 @@ function HomeComponent(vnode) {
         view: function(vnode) {
             return m("main", [
                 m(MenuComponent),
-                /*
-                m("button", {
-                    onclick: function () { m.route.set("/newuser"); }
-                }, "New User Page!"),
-                m("br"),
-                m("button", {
-                    onclick: function () { m.route.set("/login"); }
-                }, "Login!"),
-                */
-
                 m(SearchComponent)
             ]);
         }
@@ -684,56 +674,6 @@ class User {
     }
 
     // validate: validates the user object for login or create purposes
-    validate() {
-        // TODO (Brian) add in validation logic
-
-        const errors = [];
-
-        if (this.context === "data") {
-            return errors;
-        }
-
-        if (this.context === "login" || this.context === "newuser") {
-            // the username must be < 40 chars
-            if (this.username.length === 0) {
-                errors.push(new VError("username", "You must provide a value!"));
-            } else if (this.username.length > 50) {
-                errors.push(new VError("username", "Must be less than 50 characters!"));
-            } else if (0 <= this.username.indexOf(" ")) {
-                errors.push(new VError("username", "Cannot contain a space!"));
-            }
-        }
-
-        if (this.context === "newuser") {
-            // email must be real
-            if (this.email.length === 0) {
-                errors.push(new VError("email", "You must provide a value!"));
-            } else if (!email_re.test(this.email)) {
-                errors.push(new VError("email", "You must provide a valid email!"));
-            }
-        }
-
-        if (this.context === "login") {
-            // pass && 6 < pass.len
-            if (this.password.length === 0) {
-                errors.push(new VError("password", "You must provide a value!"));
-            } else if (this.password.length < 6) {
-                errors.push(new VError("password", "Your password must be at least 6 characters!"));
-            }
-        }
-
-        if (this.context === "newuser") {
-            // pass && 6 < pass.len
-            if (this.verify.length === 0) {
-                errors.push(new VError("verify", "You must provide a value!"));
-            } else if (this.password !== this.verify) {
-                errors.push(new VError("verify", "The passwords must match!"));
-            }
-        }
-
-        return errors;
-    }
-
     // create: calls the backend to create a new user
     create() {
         const errors = this.validate();
@@ -785,9 +725,63 @@ class User {
     }
 }
 
+function UserValidate(user) {
+    // TODO (Brian) add in validation logic
+
+    const errors = [];
+
+    if (user.context === "data") {
+        return errors;
+    }
+
+    if (user.context === "login" || user.context === "newuser") {
+        // the username must be < 40 chars
+        if (user.username.length === 0) {
+            errors.push(new VError("username", "You must provide a value!"));
+        } else if (user.username.length > 50) {
+            errors.push(new VError("username", "Must be less than 50 characters!"));
+        } else if (0 <= user.username.indexOf(" ")) {
+            errors.push(new VError("username", "Cannot contain a space!"));
+        }
+    }
+
+    if (user.context === "newuser") {
+        // email must be real
+        if (user.email.length === 0) {
+            errors.push(new VError("email", "You must provide a value!"));
+        } else if (!EMAIL_REGEX.test(user.email)) {
+            errors.push(new VError("email", "You must provide a valid email!"));
+        }
+    }
+
+    if (user.context === "login") {
+        // pass && 6 < pass.len
+        if (user.password.length === 0) {
+            errors.push(new VError("password", "You must provide a value!"));
+        } else if (user.password.length < 6) {
+            errors.push(new VError("password", "Your password must be at least 6 characters!"));
+        }
+    }
+
+    if (user.context === "newuser") {
+        // pass && 6 < pass.len
+        if (user.verify.length === 0) {
+            errors.push(new VError("verify", "You must provide a value!"));
+        } else if (user.password !== user.verify) {
+            errors.push(new VError("verify", "The passwords must match!"));
+        }
+    }
+
+    return errors;
+}
+
 // LoginComponent
 function LoginComponent(inivialVnode) {
-    const user = new User("login");
+    // const user = new User("login");
+
+    const user = {
+        context: "newuser"
+    };
 
     return {
         view: function(vnode) {
@@ -850,71 +844,50 @@ function NewUserComponent(vnode) {
 
     return {
         view: function(vnode) {
-            return m(".newuser", [
-                m("form", {
-                    onsubmit: function (e) {
-                        e.preventDefault();
-                    },
-                }, [
-                    m("h2", "New User"),
+            let username = m(InputComponent, {
+                object: user, prop: "username", label: "Username",
+            });
 
-                    m("div", [
+            let email = m(InputComponent, {
+                object: user, prop: "email", label: "Email", type: "email",
+            });
 
-                        m("div", [
-                            m("label", "Username"),
-                            m("input[type=text]", {
-                                oninput: function (e) { user.setUsername(e.target.value); },
-                                value: user.username,
-                            }),
-                        ]),
+            let password = m(InputComponent, {
+                object: user, prop: "password", label: "Password", type: "password",
+            });
 
-                        m("div", [
-                            m("label", "Email"),
-                            m("input[type=email]", {
-                                oninput: function (e) { user.setEmail(e.target.value); },
-                                value: user.email,
-                            }),
-                        ]),
+            let verify = m(InputComponent, {
+                object: user, prop: "verify", label: "Verify Password", type: "password",
+            });
 
-                        m("div", [
-                            m("label", "Password"),
-                            m("input[type=password]", {
-                                oninput: function (e) { user.setPassword(e.target.value); },
-                                value: user.password,
-                            }),
-                        ]),
+            let buttons = [
+                ButtonPrimary("Create", (e) => {
+                    user.submit()
+                        .then((x) => {
+                            console.log(x);
+                            m.route.set(`/`);
+                        })
+                        .catch((err) => console.error(err));
+                }),
+                Button("Cancel", (e) => m.route.set("/"))
+            ];
 
-                        m("div", [
-                            m("label", "Verify Password"),
-                            m("input[type=password]", {
-                                oninput: function (e) { user.setVerify(e.target.value); },
-                                value: user.verify,
-                            }),
-                        ]),
+            return [
+                m(MenuComponent),
 
-                        m("div", [
-                            m("button.button[type=submit]", {
-                                onclick: function() {
-                                    user.create()
-                                        .then((x) => {
-                                            m.route.set("/");
-                                        })
-                                        .catch((err) => {
-                                            console.error(err);
-                                        });
-                                }
-                            }, "Save"),
 
-                            m("button.button[type=button]", {
-                                onclick: function() { m.route.set("/home"); },
-                            }, "Cancel"),
-                        ]),
-                    ]),
-
-                    m("p", COOKIE_DISCLAIMER),
-
+                m("div", { class: "mui-container-fluid" }, [
+                    m("div", { class: "mui-row" }, [ m("div", { class: "mui-col-md-12" }, H2("New User"),) ]),
+                    m("div", { class: "mui-row" }, [ m("div", { class: "mui-col-md-12" }, username) ]),
+                    m("div", { class: "mui-row" }, [ m("div", { class: "mui-col-md-12" }, email) ]),
+                    m("div", { class: "mui-row" }, [ m("div", { class: "mui-col-md-12" }, password) ]),
+                    m("div", { class: "mui-row" }, [ m("div", { class: "mui-col-md-12" }, verify) ]),
                 ]),
-            ]);
+
+                DIV(buttons),
+
+                P(COOKIE_DISCLAIMER),
+            ];
         },
     };
 }
@@ -925,7 +898,6 @@ var root = document.body;
 const routes = {
     "/": HomeComponent,
     "/newuser": NewUserComponent,
-    "/search": SearchComponent,
     "/login": LoginComponent,
 
     "/recipe/new": RecipeEditComponent,
