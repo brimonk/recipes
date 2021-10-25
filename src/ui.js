@@ -777,70 +777,49 @@ function UserValidate(user) {
 
 // LoginComponent
 function LoginComponent(inivialVnode) {
-    // const user = new User("login");
-
     const user = {
-        context: "newuser"
+        context: "login"
     };
 
     return {
         view: function(vnode) {
-            return m(".login", [
-                m("form", {
-                    onsubmit: function (e) {
-                        e.preventDefault();
-                    },
-                }, [
-                    m("h2", "Login"),
+            let email = m(InputComponent, {
+                object: user, prop: "email", label: "Email", type: "email",
+            });
 
-                    m("div", [
+            let password = m(InputComponent, {
+                object: user, prop: "password", label: "Password", type: "password",
+            });
 
-                        m("div", [
-                            m("label", "Username"),
-                            m("input[type=text]", {
-                                oninput: function (e) { user.setUsername(e.target.value); },
-                                value: user.username,
-                            }),
-                        ]),
+            let buttons = [
+                ButtonPrimary("Login", (e) => {
+                    console.log("LOG ME IN!!");
+                }),
+                Button("Cancel", (e) => m.route.set("/"))
+            ];
 
-                        m("div", [
-                            m("label", "Password"),
-                            m("input[type=password]", {
-                                oninput: function (e) { user.setPassword(e.target.value); },
-                                value: user.password,
-                            }),
-                        ]),
+            return [
+                m(MenuComponent),
 
-                        m("div", [
-                            m("button.button[type=button]", {
-                                onclick: function() {
-                                    user.login()
-                                        .then((x) => {
-                                            m.route.set("/");
-                                        })
-                                        .catch((err) => {
-                                            console.error(err);
-                                        });
-                                }
-                            }, "Login"),
-
-                            m("button.button[type=button]", {
-                                onclick: function() { m.route.set("/home"); }
-                            }, "Cancel"),
-                        ]),
-                    ]),
-
-                    m("p", COOKIE_DISCLAIMER),
+                m("div", { class: "mui-container-fluid" }, [
+                    m("div", { class: "mui-row" }, [ m("div", { class: "mui-col-md-12" }, H2("Login"),) ]),
+                    m("div", { class: "mui-row" }, [ m("div", { class: "mui-col-md-12" }, email) ]),
+                    m("div", { class: "mui-row" }, [ m("div", { class: "mui-col-md-12" }, password) ]),
                 ]),
-            ]);
 
+                DIV(buttons),
+
+                P(COOKIE_DISCLAIMER),
+            ];
         },
     };
 }
 
 // New User Component
 function NewUserComponent(vnode) {
-    const user = new User("newuser");
+    const user = {
+        context: "newuser"
+    };
 
     return {
         view: function(vnode) {
@@ -862,19 +841,13 @@ function NewUserComponent(vnode) {
 
             let buttons = [
                 ButtonPrimary("Create", (e) => {
-                    user.submit()
-                        .then((x) => {
-                            console.log(x);
-                            m.route.set(`/`);
-                        })
-                        .catch((err) => console.error(err));
+                    console.log("CREATE MY USER!!");
                 }),
                 Button("Cancel", (e) => m.route.set("/"))
             ];
 
             return [
                 m(MenuComponent),
-
 
                 m("div", { class: "mui-container-fluid" }, [
                     m("div", { class: "mui-row" }, [ m("div", { class: "mui-col-md-12" }, H2("New User"),) ]),
