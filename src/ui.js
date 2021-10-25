@@ -407,15 +407,15 @@ function RecipeEditComponent(vnode) {
             });
 
             let cook_time_ctrl = m(InputComponent, {
-                object: recipe, prop: "cook_time", type: "number", label: "Cook Time (Minutes)"
+                object: recipe, prop: "cook_time", label: "Cook Time (HH:MM)"
             });
 
             let prep_time_ctrl = m(InputComponent, {
-                object: recipe, prop: "prep_time", type: "number", label: "Prep Time (Minutes)"
+                object: recipe, prop: "prep_time", label: "Prep Time (HH:MM)"
             });
 
             let servings_ctrl = m(InputComponent, {
-                object: recipe, prop: "servings", type: "number", label: "Servings"
+                object: recipe, prop: "servings", label: "Servings"
             });
 
             let notes_ctrl = m(TextAreaComponent, {

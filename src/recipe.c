@@ -2,6 +2,11 @@
 // 2021-10-14 22:48:02
 //
 // All of the recipe objects go in here.
+//
+// TODO (Brian)
+//
+// - Recipe validation needs to ensure that the time and servings formats are standardized. Right
+// now, we'll just let you stick whatever you want in a 128char string.
 
 #include "common.h"
 
@@ -396,13 +401,21 @@ s64 recipe_add(struct Recipe *recipe)
 	record->user_id = recipe->user_id;
 #endif
 
-	record->prep_time = recipe->prep_time;
-	record->cook_time = recipe->cook_time;
-	record->servings = recipe->servings;
-
 	string128 = store_addobj(RT_STRING128);
 	strncpy(string128->string, recipe->name, sizeof(string128->string));
 	record->name_id = string128->base.id;
+
+    string128 = store_addobj(RT_STRING128);
+    strncpy(string128->string, recipe->prep_time, sizeof(string128->string));
+    record->prep_time_id = string128->base.id;
+
+    string128 = store_addobj(RT_STRING128);
+    strncpy(string128->string, recipe->cook_time, sizeof(string128->string));
+    record->cook_time_id = string128->base.id;
+
+    string128 = store_addobj(RT_STRING128);
+    strncpy(string128->string, recipe->servings, sizeof(string128->string));
+    record->servings_id = string128->base.id;
 
 	string256 = store_addobj(RT_STRING256);
 	strncpy(string256->string, recipe->note, sizeof(string256->string));
@@ -477,9 +490,14 @@ struct Recipe *recipe_get(s64 id)
 	string128 = store_getobj(RT_STRING128, record->name_id);
 	recipe->name = strndup(string128->string, sizeof(string128->string));
 
-	recipe->prep_time = record->prep_time;
-	recipe->cook_time = record->cook_time;
-	recipe->servings = record->servings;
+    string128 = store_getobj(RT_STRING128, record->prep_time_id);
+	recipe->prep_time = strndup(string128->string, sizeof(string128->string));
+
+    string128 = store_getobj(RT_STRING128, record->cook_time_id);
+	recipe->cook_time = strndup(string128->string, sizeof(string128->string));
+
+    string128 = store_getobj(RT_STRING128, record->servings_id);
+	recipe->servings = strndup(string128->string, sizeof(string128->string));
 
 	string256 = store_getobj(RT_STRING256, record->note_id);
 	recipe->note = strndup(string256->string, sizeof(string256->string));
@@ -619,6 +637,9 @@ struct RecipeResultRecords *recipe_search(struct SearchQuery *search)
 	struct RecipeResultRecords *records;
 	recipe_t *recipe;
 	string_128_t *name;
+	string_128_t *prep_time;
+	string_128_t *cook_time;
+	string_128_t *servings;
 	size_t i;
 	size_t skip;
 	size_t page_size;
@@ -672,6 +693,21 @@ struct RecipeResultRecords *recipe_search(struct SearchQuery *search)
 			break;
 		}
 
+		prep_time = store_getobj(RT_STRING128, recipe->prep_time_id);
+		if (name == NULL) { // HOW THE FUCK
+			break;
+		}
+
+		cook_time = store_getobj(RT_STRING128, recipe->cook_time_id);
+		if (name == NULL) { // HOW THE FUCK
+			break;
+		}
+
+		servings = store_getobj(RT_STRING128, recipe->servings_id);
+		if (name == NULL) { // HOW THE FUCK
+			break;
+		}
+
 		rc = recipe_search_comparator(i, search->text);
 
 		if (rc < 0) {
@@ -682,10 +718,11 @@ struct RecipeResultRecords *recipe_search(struct SearchQuery *search)
 			result = records->records + records->records_len++;
 
             result->id = recipe->base.id;
-			strncpy(result->name, name->string, sizeof(name->string));
-			result->prep_time = recipe->prep_time;
-			result->cook_time = recipe->cook_time;
-			result->servings = recipe->servings;
+
+			strncpy(result->name, name->string, sizeof(result->name));
+            strncpy(result->prep_time, prep_time->string, sizeof(result->prep_time));
+            strncpy(result->cook_time, cook_time->string, sizeof(result->cook_time));
+            strncpy(result->servings, servings->string, sizeof(result->servings));
 		}
 	}
 
@@ -775,19 +812,19 @@ static struct Recipe *recipe_from_json(char *s)
 	}
 
 	prep_time = json_object_get(root, "prep_time");
-	if (!json_is_integer(prep_time)) {
+	if (!json_is_string(prep_time)) {
 		json_decref(root);
 		return NULL;
 	}
 
 	cook_time = json_object_get(root, "cook_time");
-	if (!json_is_integer(cook_time)) {
+	if (!json_is_string(cook_time)) {
 		json_decref(root);
 		return NULL;
 	}
 
 	servings = json_object_get(root, "servings");
-	if (!json_is_integer(servings)) {
+	if (!json_is_string(servings)) {
 		json_decref(root);
 		return NULL;
 	}
@@ -829,9 +866,9 @@ static struct Recipe *recipe_from_json(char *s)
 	// now that we have handles to all of the pieces of our recipe object, we should be
 	// able to take all of those, and get them into our regular C structure
 	recipe->name = strdup(json_string_value(name));
-	recipe->prep_time = json_integer_value(prep_time);
-	recipe->cook_time = json_integer_value(cook_time);
-	recipe->servings = json_integer_value(servings);
+	recipe->prep_time = strdup(json_string_value(prep_time));
+	recipe->cook_time = strdup(json_string_value(cook_time));
+	recipe->servings = strdup(json_string_value(servings));
 	recipe->note = strdup(json_string_value(note));
 
 	for (i = 0; i < json_array_size(ingredients); i++) {
@@ -905,7 +942,7 @@ static char *recipe_to_json(struct Recipe *recipe)
 
 	object = json_pack_ex(
 		&error, 0,
-		"{s:s, s:i, s:i, s:i, s:s, s:o, s:o, s:o}",
+		"{s:s, s:s, s:s, s:s, s:s, s:o, s:o, s:o}",
 		"name", recipe->name,
 		"prep_time", recipe->prep_time,
 		"cook_time", recipe->cook_time,
@@ -941,9 +978,9 @@ char *search_results_to_json(struct RecipeResultRecords *records)
 
 		json_object_set_new(object, "id", json_integer(records->records[i].id));
 		json_object_set_new(object, "name", json_string(records->records[i].name));
-		json_object_set_new(object, "prep_time", json_integer(records->records[i].prep_time));
-		json_object_set_new(object, "cook_time", json_integer(records->records[i].cook_time));
-		json_object_set_new(object, "servings", json_integer(records->records[i].servings));
+		json_object_set_new(object, "prep_time", json_string(records->records[i].prep_time));
+		json_object_set_new(object, "cook_time", json_string(records->records[i].cook_time));
+		json_object_set_new(object, "servings", json_string(records->records[i].servings));
 
 		json_array_append_new(array, object);
 	}
@@ -965,6 +1002,9 @@ void recipe_free(struct Recipe *recipe)
 
 	if (recipe) {
 		free(recipe->name);
+		free(recipe->prep_time);
+		free(recipe->cook_time);
+		free(recipe->servings);
 		free(recipe->note);
 
 		for (i = 0; i < ARRSIZE(recipe->ingredients) && recipe->ingredients[i]; i++) {

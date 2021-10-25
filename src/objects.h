@@ -90,11 +90,9 @@ typedef struct recipe_t {
 
 	string_128_id name_id;
 
-	int prep_time;
-	int cook_time;
-	int servings;
-
-	// ingredients, steps, and tags are "joined" to this record on "recipe_id"
+    string_128_id prep_time_id;
+    string_128_id cook_time_id;
+    string_128_id servings_id;
 
 	string_256_id note_id;
 } recipe_t;

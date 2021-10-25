@@ -11,9 +11,9 @@ struct Recipe {
 	recipe_id id;
 	char *name;
 
-	int cook_time;
-	int prep_time;
-	int servings;
+    char *prep_time;
+    char *cook_time;
+    char *servings;
 
 	char *ingredients[128];
 	size_t ingredients_len;
@@ -31,9 +31,9 @@ struct Recipe {
 struct RecipeResultRecord {
     recipe_id id;
 	char name[128];
-	int prep_time;
-	int cook_time;
-	int servings;
+    char prep_time[128];
+	char cook_time[128];
+	char servings[128];
 };
 
 // RecipeResultRecords : an aggregation of results from a search

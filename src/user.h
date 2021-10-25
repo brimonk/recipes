@@ -8,52 +8,29 @@
 
 #include "objects.h"
 
-enum {
-	USER_CONTEXT_NONE,
-	USER_CONTEXT_NEWUSER,
-	USER_CONTEXT_LOGIN,
-	USER_CONTEXT_NORMAL,
-	USER_CONTEXT_TOTAL
-};
+// NOTE (Brian): we have different structures of data that the user can input at various points.
+// At no time, do we ever expose a "User" record to anyone. That's just absurd. You get a cookie,
+// and you can ping an endpoint to find out if you're logged in. That's it.
 
-struct User {
-	char *id;
-
+// NewUserDto : the results of the "new user" form submission
+struct NewUserDto {
     char *username;
     char *email;
-
-	// NOTE (Brian): lots of things are happening with passwords here.
-	//
-	// 'password' - /api/newuser, /api/login
-	// 'verify'   - /api/newuser
-	// 'hash'     - not a submittable field, internal to the database only
-	//
-	// When creating a new user, a user will provide (because they must)
-	// - password
-	// - verify
-	// And if they match, validation passes.
-	//
-	// When loggin in, a user must provide
-	// - password
-	// This password is checked against the hashed value from the database. If
-	// they match after a call to 'crypto_pwhash_str_verify', they can login.
-	//
-	// For normal requests and things, the only user information that comes
-	// across the wire is the user's session, in a cookie. So, for normal
-	// requests that would like to verify if a user has access to a thing,
-	// they'll need to call 'user_from_session', which will query the database
-	// to pull out the user object using the current session id.
-	//
-	// To help functions denote at what the current user object is for, you can
-	// set the 'context' int to a USER_CONTEXT_* value.
-
     char *password;
     char *verify;
-	char *hash;
+};
 
-	char *secret;
+// LoginDto : the results of the Login Form
+struct LoginDto {
+    char *username;
+    char *password;
+};
 
-	int context;
+// UserSession : this data gets concatenated with a ":", and base64 encoded, and stored in a cookie
+// This is what we use to determine if a user is who they say they are, and so on.
+struct UserSession {
+    user_id id;
+    char *secret;
 };
 
 // user_api_newuser: endpoint, /api/v1/user/create
