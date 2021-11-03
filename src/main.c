@@ -19,23 +19,13 @@
 
 #include "recipe.h"
 #include "user.h"
+#include "ht.h"
 
 #define PORT (2000)
 
 // STATIC STUFF
 
 static magic_t MAGIC_COOKIE;
-
-// APPLICATION DATA STRUCTURES HERE
-struct search {
-    char *query;
-    char *sort_column;
-    char *sort_dir;
-    size_t page;
-    size_t size;
-};
-
-// APPLICATION FUNCTIONS HERE
 
 // init: initializes the program
 void init(char *fname);
@@ -47,10 +37,10 @@ void request_handler(struct http_request_s *req);
 int rcheck(struct http_request_s *req, char *target, char *method);
 
 // send_style: sends the style sheet, and ensures the correct mime type is sent
-int send_style(struct http_request_s *req, struct http_response_s *res, char *path);
+int send_style(struct http_request_s *req, struct http_response_s *res);
 
 // send_file: sends the file in the request, coalescing to '/index.html' from "html/"
-int send_file(struct http_request_s *req, struct http_response_s *res, char *path);
+int send_file(struct http_request_s *req, struct http_response_s *res);
 
 // send_error: sends an error
 int send_error(struct http_request_s *req, struct http_response_s *res, int errcode);
@@ -70,6 +60,7 @@ extern handle_t handle;
 #define SCHEMA ("src/schema.sql")
 
 struct http_server_s *server;
+struct ht *routes;
 
 // handle_sigint: handles SIGINT so we can write to the database
 void handle_sigint(int sig)
@@ -78,6 +69,8 @@ void handle_sigint(int sig)
 	store_free();
 
 	http_server_free(server);
+
+	ht_destroy(routes);
 
 	printf("\n");
 	exit(1);
@@ -98,58 +91,76 @@ int main(int argc, char **argv)
 
 	signal(SIGINT, handle_sigint);
 
+	// setup the routing hashtable
+	routes = ht_create();
+
+	ht_set(routes, "POST /api/v1/recipe", (void *)recipe_api_post);
+	ht_set(routes, "GET /api/v1/recipe/list", (void *)recipe_api_getlist);
+	ht_set(routes, "GET /api/v1/recipe/:id", (void *)recipe_api_get);
+	ht_set(routes, "PUT /api/v1/recipe/:id", (void *)recipe_api_put);
+	ht_set(routes, "DELETE /api/v1/recipe/:id", (void *)recipe_api_delete);
+	ht_set(routes, "GET /ui.js", (void *)send_file);
+	ht_set(routes, "GET /styles.css", (void *)send_style);
+	ht_set(routes, "GET /index.html", (void *)send_file);
+	ht_set(routes, "GET /", (void *)send_file);
+
 	http_server_listen(server);
 
 	http_server_free(server);
 
 	store_write();
+	ht_destroy(routes);
 
 	return 0;
 }
 
-// rcheck: returns true if the route in req matches the path and method
-int rcheck(struct http_request_s *req, char *target, char *method)
+// format_target_string : format the incomming requets for the routing hashtable
+int format_target_string(char *s, struct http_request_s *req, size_t len)
 {
-	struct http_string_s m, t;
-    char *uri;
-	int i, rc;
+	size_t buflen;
+	struct http_string_s target, method;
+	char *tok;
+	char *hasq;
+	char copy[BUFLARGE];
+	char readfrom[BUFLARGE];
 
-	if (req == NULL)
-		return 0;
-	if (target == NULL)
-		return 0;
-	if (method == NULL)
-		return 0;
+	// TODO (Brian):
+	//
+	// - make sure we uppercase (normalize, really) all of the data from the user. HTTP blows.
+	// - ensure 'len' isn't larger than BUFLARGE
 
-	m = http_request_method(req);
+	memset(copy, 0, sizeof copy);
+	memset(readfrom, 0, sizeof readfrom);
 
-	for (i = 0; i < m.len && i < strlen(method); i++) {
-		if (tolower(m.buf[i]) != tolower(method[i]))
-			return 0;
+	assert(s != NULL);
+
+	method = http_request_method(req);
+	target = http_request_target(req);
+
+	strncpy(readfrom, target.buf, MIN(sizeof(readfrom), target.len));
+
+	buflen = 0;
+
+	for (tok = strtok(readfrom, "/"); tok != NULL && buflen <= len; tok = strtok(NULL, "/")) {
+		if (isdigit(*tok)) {
+			buflen += snprintf(copy + buflen, sizeof(copy) - buflen, "/:id");
+		} else {
+			hasq = strchr(tok, '?');
+			if (hasq) {
+				buflen += snprintf(copy + buflen, sizeof(copy) - buflen, "/%.*s", (int)(hasq - tok), tok);
+			} else {
+				buflen += snprintf(copy + buflen, sizeof(copy) - buflen, "/%s", tok);
+			}
+		}
 	}
 
-	t = http_request_target(req);
-    uri = strndup(t.buf, t.len);
+	if (copy[0] == '\0') {
+		copy[0] = '/';
+	}
 
-    if (strchr(uri, '?') != NULL) {
-        (*strchr(uri, '?')) = 0;
-    }
+	snprintf(s, len, "%.*s %s", method.len, method.buf, copy);
 
-    rc = 1;
-
-    for (i = 0; rc && i < strlen(uri) && i < strlen(target); i++) {
-        if (tolower(uri[i]) != tolower(target[i])) {
-            rc = 0;
-        }
-    }
-
-    if (i != strlen(target)) {
-        rc = 0;
-    }
-
-    free(uri);
-
-	return rc;
+	return 0;
 }
 
 // request_handler: the http request handler
@@ -157,81 +168,40 @@ void request_handler(struct http_request_s *req)
 {
 	struct http_response_s *res;
 	int rc;
+	int (*func)(struct http_request_s *, struct http_response_s *);
+	char buf[BUFLARGE];
 
 #define SNDERR(E) send_error(req, res, (E))
 #define CHKERR(E) do { if ((rc) < 0) { send_error(req, res, (E)); } } while (0)
 
+	memset(buf, 0, sizeof buf);
+
+	rc = format_target_string(buf, req, sizeof buf);
+
 	res = http_response_init();
 
-	if (0) {
+	func = ht_get(routes, buf);
 
-#if 0
-    // user endpoints
-    } else if (rcheck(req, "/api/v1/user/create", "POST")) {
-        rc = user_api_newuser(req, res);
-        CHKERR(503);
-
-    } else if (rcheck(req, "/api/v1/user/login", "POST")) {
-		rc = user_api_login(req, res);
-        CHKERR(503); // TODO (Brian) fix login too
-
-	} else if (rcheck(req, "/api/v1/user/logout", "POST")) {
-		rc = user_api_logout(req, res);
-		CHKERR(503);
-#endif
-
-	// recipe endpoints
-	} else if (rcheck(req, "/api/v1/recipe", "POST")) {
-		rc = recipe_api_post(req, res);
-		CHKERR(503);
-
-	} else if (rcheck(req, "/api/v1/recipe/list", "GET")) {
-		rc = recipe_api_getlist(req, res);
-		CHKERR(503);
-
-	} else if (rcheck(req, "/api/v1/recipe", "GET")) {
-		rc = recipe_api_get(req, res);
-		CHKERR(503);
-
-	} else if (rcheck(req, "/api/v1/recipe", "PUT")) {
-		rc = recipe_api_put(req, res);
-		CHKERR(503);
-
-	} else if (rcheck(req, "/api/v1/recipe", "DELETE")) {
-		rc = recipe_api_delete(req, res);
-		CHKERR(503);
-
-	// static files, unrelated to main CRUD operations
-	} else if (rcheck(req, "/ui.js", "GET")) {
-		rc = send_file(req, res, "html/ui.js");
-        CHKERR(503);
-
-	} else if (rcheck(req, "/styles.css", "GET")) {
-		rc = send_style(req, res, "html/styles.css");
-        CHKERR(503);
-
-	} else if (rcheck(req, "/", "GET") || rcheck(req, "/index.html", "GET")) {
-		rc = send_file(req, res, "html/index.html");
-        CHKERR(503);
-
-	} else {
+	if (func == NULL) {
         SNDERR(404);
+	} else {
+		rc = func(req, res);
+		CHKERR(503);
 	}
 }
 
 // send_style: sends the style sheet, and ensures the correct mime type is sent
-int send_style(struct http_request_s *req, struct http_response_s *res, char *path)
+int send_style(struct http_request_s *req, struct http_response_s *res)
 {
 	char *file_data;
+	char *path;
 	size_t len;
 
     // NOTE (Brian) there's a small issue with libmagic setting the mime type for css correctly, so
     // I'm basically doing this myself. Without this, the server just sends "text/plain" as the
     // type, and the browser doesn't like that.
 
-	if (path == NULL) {
-		return -1;
-	}
+	path = "html/styles.css";
 
 	if (access(path, F_OK) == 0) {
 		file_data = sys_readfile(path, &len);
@@ -251,11 +221,35 @@ int send_style(struct http_request_s *req, struct http_response_s *res, char *pa
 }
 
 // send_file: sends the file in the request, coalescing to '/index.html' from "html/"
-int send_file(struct http_request_s *req, struct http_response_s *res, char *path)
+int send_file(struct http_request_s *req, struct http_response_s *res)
 {
+	struct http_string_s target;
 	char *file_data;
 	char *mime_type;
+	char *requested;
+	char *path;
 	size_t len;
+
+	// NOTE (Brian): To make this routing fit well in a hashtable (hopefully, to make routing
+	// easier), this function distributes the two static files that we give a shit about.
+
+	path = NULL;
+
+	target = http_request_target(req);
+
+	requested = strndup(target.buf, target.len);
+
+	if (streq("/ui.js", requested)) {
+		path = "html/ui.js";
+	} else if (streq("/styles.css", requested)) {
+		path = "html/styles.css";
+	} else if (streq("/index.html", requested)) {
+		path = "html/index.html";
+	} else if (streq("/", requested)) {
+		path = "html/index.html";
+	}
+
+	free(requested);
 
 	if (path == NULL) {
 		return -1;

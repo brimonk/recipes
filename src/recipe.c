@@ -29,9 +29,6 @@ s64 recipe_add(struct Recipe *recipe);
 // recipe_get : fetches a recipe object from the store, and parses it
 struct Recipe *recipe_get(s64 id);
 
-// recipe_update : updates the recipe at id 'id', with 'recipe''s data
-s64 recipe_update(s64 id, struct Recipe *recipe);
-
 // recipe_delete : marks the recipe at 'id', as unallocated
 s64 recipe_delete(s64 id);
 
@@ -222,8 +219,65 @@ int recipe_api_post(struct http_request_s *req, struct http_response_s *res)
 // recipe_api_put : endpoint, PUT - /api/v1/recipe/{id}
 int recipe_api_put(struct http_request_s *req, struct http_response_s *res)
 {
-	http_response_status(res, 400);
+	recipe_id id;
+	s64 rc;
+	struct Recipe *recipe;
+	struct http_string_s body;
+	struct http_string_s uri;
+	char *url;
+	char *json;
+	char tbuf[BUFLARGE];
+
+	uri = http_request_target(req);
+	url = strndup(uri.buf, strchr(uri.buf, ' ') - uri.buf);
+
+    rc = sscanf(url, "/api/v1/recipe/%lld", &id);
+    assert(rc == 1);
+
+	free(url);
+
+	body = http_request_body(req);
+
+	json = strndup(body.buf, body.len);
+	if (json == NULL) { // TODO (Brian): HTTP Error
+		return -1;
+	}
+
+	recipe = recipe_from_json(json);
+
+	free(json);
+
+	if (recipe == NULL) { // TODO (Brian): HTTP Error
+		ERR("couldn't parse recipe from json!\n");
+		return -1;
+	}
+
+	if (recipe_validation(recipe) < 0) { // TODO (Brian): HTTP Error
+		ERR("recipe record invalid!\n");
+		return -1;
+	}
+
+	rc = recipe_delete(id);
+	if (rc < 0) {
+		ERR("couldn't nuke the recipe!\n");
+		return -1;
+	}
+
+	id = recipe_add(recipe);
+	if (id < 0) {
+		ERR("couldn't make the new recipe!\n");
+		return -1;
+	}
+
+	snprintf(tbuf, sizeof tbuf, "{\"id\":%lld}", id);
+
+	http_response_status(res, 200);
+
+	http_response_body(res, tbuf, strlen(tbuf));
+
 	http_respond(req, res);
+
+	recipe_free(recipe);
 
 	return 0;
 }
@@ -247,8 +301,7 @@ int recipe_api_get(struct http_request_s *req, struct http_response_s *res)
 	free(url);
 
 	recipe = recipe_get(id);
-	if (recipe == NULL) {
-        // TODO (Brian): return HTTP error
+	if (recipe == NULL) { // TODO (Brian): return HTTP error
 		ERR("couldn't fetch the recipe from the database!\n");
 		return -1;
 	}
@@ -538,12 +591,6 @@ struct Recipe *recipe_get(s64 id)
 	return recipe;
 }
 
-// recipe_update : updates the recipe at id 'id', with 'recipe''s data
-s64 recipe_update(s64 id, struct Recipe *recipe)
-{
-	return 0;
-}
-
 // recipe_delete : marks the recipe at 'id', as unallocated
 s64 recipe_delete(s64 id)
 {
@@ -610,6 +657,11 @@ int recipe_search_comparator(recipe_id id, char *text)
 	recipe = store_getobj(RT_RECIPE, id);
 	if (recipe == NULL) {
 		return -1;
+	}
+
+	// NOTE (Brian): an empty object, not in use, doesn't match any search criteria
+	if (!(recipe->base.flags & OBJECT_FLAG_USED)) {
+		return 0;
 	}
 
 	name = store_getobj(RT_STRING128, recipe->name_id);
@@ -942,7 +994,8 @@ static char *recipe_to_json(struct Recipe *recipe)
 
 	object = json_pack_ex(
 		&error, 0,
-		"{s:s, s:s, s:s, s:s, s:s, s:o, s:o, s:o}",
+		"{s:I s:s, s:s, s:s, s:s, s:s, s:o, s:o, s:o}",
+		"id", (json_int_t)recipe->id,
 		"name", recipe->name,
 		"prep_time", recipe->prep_time,
 		"cook_time", recipe->cook_time,

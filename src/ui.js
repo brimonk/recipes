@@ -243,12 +243,14 @@ function MenuComponent(vnode) {
 // Recipe: the Recipe data structure
 class Recipe {
     constructor(id) {
-        this.id = id;
+        this.isLoading = true;
 
-        this.init();
-
-        if (this.id !== undefined) {
+        if (id == parseInt(id)) {
+            this.id = parseInt(id);
             this.fetch();
+        } else {
+            this.init();
+            this.isLoading = false;
         }
     }
 
@@ -286,6 +288,8 @@ class Recipe {
             this.steps = x.steps;
             this.tags = x.tags;
 
+            this.isLoading = false;
+
             m.redraw();
         }).catch((err) => {
             console.error(err);
@@ -304,11 +308,19 @@ class Recipe {
     // submit : attempts to submit the current object to the backend
     submit() {
         if (this.isValid()) {
-            return m.request({
-                method: "POST",
-                url: `/api/v1/recipe`,
-                body: this
-            });
+            if (this.id === undefined) {
+                return m.request({
+                    method: "POST",
+                    url: `/api/v1/recipe`,
+                    body: this
+                });
+            } else {
+                return m.request({
+                    method: "PUT",
+                    url: `/api/v1/recipe/${this.id}`,
+                    body: this
+                });
+            }
         } else {
             return Promise.reject(new Error(`cannot submit a recipe that is invalid!`));
         }
@@ -332,16 +344,13 @@ function RecipeViewComponent(vnode) {
     let id = m.route.param("id");
     let recipe = new Recipe(id);
 
-    console.log(recipe);
-
     return {
         view: function(vnode) {
             let content;
 
-            if (recipe.name === null || recipe.name === "") {
+            if (recipe.isLoading) {
                 content = m("p", "Now Loading...");
             } else {
-
                 content = [
                     H2(recipe.name),
 
@@ -393,6 +402,15 @@ function RecipeEditComponent(vnode) {
 
     return {
         view: function(vnode) {
+            if (recipe.isLoading) {
+                return  [
+                    m(MenuComponent),
+                    m("div", { class: "mui-container-fluid" }, [
+                        P("Now Loading...")
+                    ])
+                ];
+            }
+
             // testing just with the name
             let name_ctrl = m(InputComponent, {
                 object: recipe, prop: "name", label: "Name"
@@ -431,10 +449,7 @@ function RecipeEditComponent(vnode) {
             let submit_button = ButtonPrimary(recipe.id !== undefined ? "Save" : "Create",
                 (e) => {
                     recipe.submit()
-                        .then((x) => {
-                            console.log(x);
-                            m.route.set(`/recipe/${x.id}`);
-                        })
+                        .then((x) => { m.route.set(`/recipe/${x.id}`); })
                         .catch((err) => console.error(err));
                 }
             );
@@ -465,8 +480,8 @@ function RecipeEditComponent(vnode) {
                         m("div", { class: "mui-col-md-12" }, name_ctrl)
                     ]),
                     m("div", { class: "mui-row" }, [
-                        m("div", { class: "mui-col-md-4" }, cook_time_ctrl),
                         m("div", { class: "mui-col-md-4" }, prep_time_ctrl),
+                        m("div", { class: "mui-col-md-4" }, cook_time_ctrl),
                         m("div", { class: "mui-col-md-4" }, servings_ctrl),
                     ]),
                     H4("Ingredients"), ingredients_ctrl,

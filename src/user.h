@@ -12,16 +12,16 @@
 // At no time, do we ever expose a "User" record to anyone. That's just absurd. You get a cookie,
 // and you can ping an endpoint to find out if you're logged in. That's it.
 
-// NewUserDto : the results of the "new user" form submission
-struct NewUserDto {
+// NewUser : the results of the "new user" form submission
+struct NewUser {
     char *username;
     char *email;
     char *password;
     char *verify;
 };
 
-// LoginDto : the results of the Login Form
-struct LoginDto {
+// Login : the results of the Login Form
+struct Login {
     char *username;
     char *password;
 };

@@ -10,3 +10,7 @@ textarea {
     resize: vertical;
 }
 
+p {
+    white-space: pre-wrap;
+}
+
