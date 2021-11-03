@@ -59,8 +59,8 @@ extern handle_t handle;
 #define USAGE ("USAGE: %s <dbname>\n")
 #define SCHEMA ("src/schema.sql")
 
-struct http_server_s *server;
 struct ht *routes;
+struct http_server_s *server;
 
 // handle_sigint: handles SIGINT so we can write to the database
 void handle_sigint(int sig)
