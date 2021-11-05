@@ -229,7 +229,7 @@ function ListComponent(vnode) {
                 }
             }
 
-            return m("li", { draggable: true }, controls);
+            return m("li", controls);
         });
 
         let controls = [ header, add, items ];
