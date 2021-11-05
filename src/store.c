@@ -126,6 +126,10 @@ void store_freeobj(int type, u64 id)
     lump_t *lump;
     objectbase_t *base;
 
+	// NOTE (Brian): at some point, we certainly want to mark these slots as free. Right now, we
+	// just mark them as unused. That honestly might be the source of the Pesto bug, I'm not quite
+	// sure.
+
     assert(0 <= type && type < RT_TOTAL);
 
     lump = &handle.header.lumps[type];

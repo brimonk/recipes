@@ -173,6 +173,8 @@ function ListComponent(vnode) {
         type = "ul";
     }
 
+    const header = H3(name);
+
     const add = ButtonPrimary("+", () => list.push(""));
 
     const viewfn = function(innervnode) {
@@ -187,24 +189,50 @@ function ListComponent(vnode) {
         const items = list.map((e, i, a) => {
             const is_last = i === a.length - 1;
 
+            /*
             const content = m("input", {
                 autocomplete: "nope",
                 value: a[i],
                 oninput: (e) => a[i] = e.target.value,
             });
+            */
+
+            const content = m(InputComponent, {
+                object: a, prop: i, label: `Item ${i}`
+            });
 
             const sub = ButtonAccent("-", () => list.splice(i, 1));
+
+            // NOTE (Brian): With the button handlers, we always swap the item for the one before /
+            // after it in the array. We ASSUME, that these buttons won't be shown on the first or
+            // last items in the list.
+
+            const up = Button("\u25B2", () => {
+                [a[i - 1], a[i]] = [a[i], a[i - 1]];
+            });
+
+            const down = Button("\u25BC", () => {
+                [a[i + 1], a[i]] = [a[i], a[i + 1]];
+            });
 
             let controls = [ content ];
 
             if (a.length > 1) {
                 controls.push(sub);
+
+                if (0 < i) {
+                    controls.push(up);
+                }
+
+                if (i < a.length) {
+                    controls.push(down);
+                }
             }
 
-            return m("li", controls);
+            return m("li", { draggable: true }, controls);
         });
 
-        let controls = [ items, add ];
+        let controls = [ header, add, items ];
 
         return m(type, controls);
     }
@@ -366,7 +394,7 @@ function RecipeViewComponent(vnode) {
 
                         H3("Ingredients"),
                         m(ListComponent, {
-                            list: recipe.ingredients, type: "ul", isview: true
+                            name: "Ingredients", list: recipe.ingredients, type: "ul", isview: true
                         }),
 
                         H3("Steps"),
