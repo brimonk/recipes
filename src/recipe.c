@@ -792,9 +792,6 @@ struct RecipeResultRecords *recipe_search(struct SearchQuery *search)
 		}
 
 		if (rc > 0) {
-			// DEBUGGING
-			printf("Record %lld, Flags : 0x%llX\n", recipe->base.id, recipe->base.flags);
-
 			result = records->records + records->records_len++;
 
             result->id = recipe->base.id;

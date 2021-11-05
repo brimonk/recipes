@@ -57,7 +57,7 @@ typedef struct usersession_t {
 } usersession_t;
 
 // recipe_id : the pk for a recipe item (just a u64 that's the array offset)
-typedef u64 recipe_id;
+typedef s64 recipe_id;
 
 // ingredient_t : a single ingredient (it's just a double pointer)
 typedef struct ingredient_t {
@@ -66,7 +66,7 @@ typedef struct ingredient_t {
 	string_128_id string_id;
 } ingredient_t;
 
-typedef u64 ingredient_id;
+typedef s64 ingredient_id;
 
 // step_t : a single step for a recipe
 typedef struct step_t {
@@ -75,12 +75,16 @@ typedef struct step_t {
 	string_128_id string_id;
 } step_t;
 
+typedef s64 step_id;
+
 // tag_t : a single tag in the system (it's just a double pointer)
 typedef struct tag_t {
 	objectbase_t base;
 	recipe_id recipe_id;
 	string_128_id string_id;
 } tag_t;
+
+typedef s64 tag_id;
 
 // recipe_t : recipe struct
 typedef struct recipe_t {
@@ -99,7 +103,7 @@ typedef struct recipe_t {
 
 #define OBJECT_MAGIC   ("Chrzanowski Recipe V1")
 
-#define OBJECT_VERSION (0x000001) // 2021-10-13 01:44:40
+#define OBJECT_INITIAL_VERSION (0x000001)
 
 #define DEFAULT_RECORD_CNT (32)
 

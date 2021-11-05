@@ -179,6 +179,18 @@ s64 store_getlen(int type)
     return lump->used;
 }
 
+// store_getversion : returns the version
+u64 store_getversion()
+{
+	return handle.header.version;
+}
+
+// store_setversion : sets the store version
+void store_setversion(u64 version)
+{
+	handle.header.version = version;
+}
+
 // store_initialize : sets up the backing store ((re)sizes the file, and 
 int store_initialize(void)
 {
@@ -191,7 +203,7 @@ int store_initialize(void)
     // from the backing store.
 
     strncpy(header.magic, OBJECT_MAGIC, sizeof(header.magic));
-    header.version = OBJECT_VERSION;
+    header.version = OBJECT_INITIAL_VERSION;
 
     size = 0x1000;
 

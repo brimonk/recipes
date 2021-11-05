@@ -16,10 +16,11 @@
 #include <sodium.h>
 
 #include "objects.h"
+#include "ht.h"
+#include "migrations.h"
 
 #include "recipe.h"
 #include "user.h"
-#include "ht.h"
 
 #define PORT (2000)
 
@@ -78,12 +79,22 @@ void handle_sigint(int sig)
 
 int main(int argc, char **argv)
 {
+	int rc;
+
 	if (argc < 2) {
 		fprintf(stderr, USAGE, argv[0]);
 		return 1;
 	}
 
 	init(argv[1]);
+
+	rc = migrations_exec();
+	if (rc < 0) {
+		ERR("couldn't apply migrations, quitting!\n");
+		exit(1);
+	}
+
+	store_write();
 
 	server = http_server_init(PORT, request_handler);
 

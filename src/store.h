@@ -16,6 +16,12 @@ int store_initialize(void);
 // store_getlen : returns the length of the table describe in 'type'
 s64 store_getlen(int type);
 
+// store_getversion : returns the version
+u64 store_getversion();
+
+// store_setversion : sets the store version
+void store_setversion(u64 version);
+
 // store_getobj : gets the object with id 'id' and type 'type' from the store
 void *store_getobj(int type, u64 id);
 
