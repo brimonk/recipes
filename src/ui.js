@@ -94,28 +94,35 @@ function InputComponent(vnode) {
 
     return {
         view: function(vnode) {
-            return m("div", { class: "mui-textfield mui-textfield--float-label" }, [
-                m("input", {
-                    autocomplete: "nope",
-                    value: object[prop],
-                    type: type,
-                    oninput: (e) => {
-                        if (type === "number") {
-                            const strval = e.target.value.replace(/\D/g, "");
-                            if (strval === "") {
-                                object[prop] = null;
-                            } else {
-                                object[prop] = parseInt(strval);
-                            }
-                        } else if (type === "email") {
-                            object[prop] = e.target.value.replace(/ /g, "");
+            const contents = [];
+
+            const input = m("input", {
+                autocomplete: "nope",
+                value: object[prop],
+                type: type,
+                oninput: (e) => {
+                    if (type === "number") {
+                        const strval = e.target.value.replace(/\D/g, "");
+                        if (strval === "") {
+                            object[prop] = null;
                         } else {
-                            object[prop] = e.target.value;
+                            object[prop] = parseInt(strval);
                         }
-                    },
-                }),
-                m("label", label)
-            ]);
+                    } else if (type === "email") {
+                        object[prop] = e.target.value.replace(/ /g, "");
+                    } else {
+                        object[prop] = e.target.value;
+                    }
+                },
+            });
+
+            contents.push(input);
+
+            if (label) {
+                contents.push(m("label", label));
+            }
+
+            return m("div", { class: "mui-textfield mui-textfield--float-label" }, contents);
         }
     };
 }
@@ -130,31 +137,57 @@ function TextAreaComponent(vnode) {
     let rows = vnode.attrs.rows;
     let maxlen = vnode.attrs.maxlen;
 
-    const coalesce = (x, def) => {
-        if (x !== +x)
-            return def;
-        return +x;
+    const isnum = (x) => {
+        return x == +x && parseInt(x) === +x;
     };
 
-    cols = coalesce(cols, 5);
-    rows = coalesce(rows, 5);
-    maxlen = coalesce(maxlen, 40);
+    const props = {};
+
+    if (isnum(cols)) {
+        cols = +cols;
+        props["cols"] = +cols;
+    }
+
+    if (isnum(rows)) {
+        rows = +rows;
+        props["rows"] = +rows;
+    }
+
+    if (isnum(maxlen)) {
+        maxlen = +maxlen;
+        props["maxlen"] = +maxlen;
+    }
+
+    props["value"] = object[prop];
+    props["oninput"] = (e) => {
+        object[prop] = e.target.value;
+    };
 
     return {
         view: function(vnode) {
-            return m("div", { class: "mui-textfield mui-textfield--float-label" }, [
-                m(`textarea`, {
-                    cols: cols,
-                    rows: rows,
-                    maxlength: maxlen,
+            const contents = [];
 
-                    value: object[prop],
-                    oninput: (e) => {
-                        object[prop] = e.target.value;
-                    },
-                }),
-                m("label", label)
-            ]);
+            /*
+            const textarea = m(`textarea`, {
+                cols: cols,
+                rows: rows,
+                maxlength: maxlen,
+
+                oninput: (e) => {
+                    object[prop] = e.target.value;
+                },
+            });
+            */
+
+            const textarea = m(`textarea`, props, object[prop]);
+
+            contents.push(textarea);
+
+            if (label) {
+                contents.push(m("label", label));
+            }
+
+            return m("div", { class: "mui-textfield mui-textfield--float-label" }, contents);
         }
     };
 }
@@ -197,9 +230,7 @@ function ListComponent(vnode) {
             });
             */
 
-            const content = m(InputComponent, {
-                object: a, prop: i, label: `Item ${i}`
-            });
+            const content = m(TextAreaComponent, { object: a, prop: i, rows: 3 });
 
             const sub = ButtonAccent("-", () => list.splice(i, 1));
 
@@ -224,7 +255,7 @@ function ListComponent(vnode) {
                     controls.push(up);
                 }
 
-                if (i < a.length) {
+                if (i < a.length - 1) {
                     controls.push(down);
                 }
             }
@@ -232,7 +263,7 @@ function ListComponent(vnode) {
             return m("li", controls);
         });
 
-        let controls = [ header, add, items ];
+        let controls = [ m("div", [ header, add ]), items ];
 
         return m(type, controls);
     }
