@@ -628,6 +628,7 @@ s64 recipe_delete(s64 id)
 		ingredient_t *ingredient;
 		ingredient = store_getobj(RT_INGREDIENT, i);
 		if (ingredient != NULL && recipe->base.id == ingredient->recipe_id) {
+			store_freeobj(RT_STRING128, ingredient->string_id);
 			store_freeobj(RT_INGREDIENT, i);
 		}
 	}
@@ -636,6 +637,7 @@ s64 recipe_delete(s64 id)
 		step_t *step;
 		step = store_getobj(RT_STEP, i);
 		if (step != NULL && recipe->base.id == step->recipe_id) {
+			store_freeobj(RT_STRING128, step->string_id);
 			store_freeobj(RT_STEP, i);
 		}
 	}
@@ -644,6 +646,7 @@ s64 recipe_delete(s64 id)
 		tag_t *tag;
 		tag = store_getobj(RT_TAG, i);
 		if (tag != NULL && recipe->base.id == tag->recipe_id) {
+			store_freeobj(RT_STRING128, tag->string_id);
 			store_freeobj(RT_TAG, i);
 		}
 	}
@@ -786,6 +789,9 @@ struct RecipeResultRecords *recipe_search(struct SearchQuery *search)
 		}
 
 		if (rc > 0) {
+			// DEBUGGING
+			printf("Record %lld, Flags : 0x%llX\n", recipe->base.id, recipe->base.flags);
+
 			result = records->records + records->records_len++;
 
             result->id = recipe->base.id;
