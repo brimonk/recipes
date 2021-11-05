@@ -652,7 +652,10 @@ s64 recipe_delete(s64 id)
 	}
 
 	store_freeobj(RT_STRING128, recipe->name_id);
-	store_freeobj(RT_STRING256, recipe->note_id);
+
+	if (0 < recipe->note_id) {
+		store_freeobj(RT_STRING256, recipe->note_id);
+	}
 
 	store_freeobj(RT_RECIPE, id);
 
@@ -682,7 +685,7 @@ int recipe_search_comparator(recipe_id id, char *text)
 	}
 
 	// NOTE (Brian): an empty object, not in use, doesn't match any search criteria
-	if (!(recipe->base.flags & OBJECT_FLAG_USED)) {
+	if (recipe->base.flags ^ OBJECT_FLAG_USED) {
 		return 0;
 	}
 

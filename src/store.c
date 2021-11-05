@@ -10,7 +10,20 @@
 #include <unistd.h>
 #include <sys/types.h>
 
-// global handle, might have to deal with syncing if we end up in multi-threaded land
+// NOTE (Brian): this table is really only for debugging purposes
+char *recordtypes[] = {
+	"User",
+	"Recipe",
+	"Step",
+	"Ingredient",
+	"Tag",
+	"String128",
+	"String256",
+	NULL
+};
+
+// global handle for backing storage
+// NOTE (Brian): might have to deal with syncing if we end up in multi-threaded land
 handle_t handle;
 
 // store_open : initializes the backing store
@@ -58,6 +71,8 @@ void *store_getobj(int type, u64 id)
 
     lump = &handle.header.lumps[type];
 
+	// printf("%s - getting '%s - %lld'\n", __FUNCTION__, recordtypes[type], id);
+
 	if (id <= 0) {
 		return NULL;
 	}
@@ -71,6 +86,7 @@ void *store_getobj(int type, u64 id)
     base = (void *)(((unsigned char *)handle.ptrs[type]) + lump->recsize * id);
 
     if (base->flags ^ OBJECT_FLAG_USED) {
+		// printf("  NOT IN USE!\n");
         return NULL;
     }
 
@@ -139,6 +155,10 @@ void store_freeobj(int type, u64 id)
 	// sure.
 
     assert(0 <= type && type < RT_TOTAL);
+
+	// printf("%s - freeing '%s - %lld'\n", __FUNCTION__, recordtypes[type], id);
+
+	id--;
 
     lump = &handle.header.lumps[type];
 
