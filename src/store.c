@@ -58,6 +58,12 @@ void *store_getobj(int type, u64 id)
 
     lump = &handle.header.lumps[type];
 
+	if (id <= 0) {
+		return NULL;
+	}
+
+	id--;
+
     if (lump->used < id) {
         return NULL;
     }
@@ -114,7 +120,7 @@ void *store_addobj(int type)
 
     base = (void *)(((unsigned char *)handle.ptrs[type]) + lump->recsize * lump->used);
 
-    base->id = lump->used++;
+    base->id = lump->used++ + 1;
     base->flags |= OBJECT_FLAG_USED;
 
     return base;

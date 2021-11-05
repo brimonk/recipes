@@ -556,7 +556,7 @@ struct Recipe *recipe_get(s64 id)
 	recipe->note = strndup(string256->string, sizeof(string256->string));
 
 	// aggregate all of the ingredients
-	for (i = 0, len = store_getlen(RT_INGREDIENT); i < len; i++) {
+	for (i = 1, len = store_getlen(RT_INGREDIENT); i <= len; i++) {
 		ingredient = store_getobj(RT_INGREDIENT, i);
 		if (recipe->id == ingredient->recipe_id) {
 			string128 = store_getobj(RT_STRING128, ingredient->string_id);
@@ -567,7 +567,7 @@ struct Recipe *recipe_get(s64 id)
 	}
 
 	// aggregate all of the steps
-	for (i = 0, len = store_getlen(RT_STEP); i < len; i++) {
+	for (i = 1, len = store_getlen(RT_STEP); i <= len; i++) {
 		step = store_getobj(RT_STEP, i);
 		if (recipe->id == step->recipe_id) {
 			string128 = store_getobj(RT_STRING128, step->string_id);
@@ -578,7 +578,7 @@ struct Recipe *recipe_get(s64 id)
 	}
 
 	// aggregate all of the tags
-	for (i = 0, len = store_getlen(RT_TAG); i < len; i++) {
+	for (i = 1, len = store_getlen(RT_TAG); i <= len; i++) {
 		tag = store_getobj(RT_TAG, i);
 		if (recipe->id == tag->recipe_id) {
 			string128 = store_getobj(RT_STRING128, tag->string_id);
@@ -605,26 +605,26 @@ s64 recipe_delete(s64 id)
 		return -1;
 	}
 
-	for (i = 0, len = store_getlen(RT_INGREDIENT); i < len; i++) {
+	for (i = 1, len = store_getlen(RT_INGREDIENT); i <= len; i++) {
 		ingredient_t *ingredient;
 		ingredient = store_getobj(RT_INGREDIENT, i);
-		if (recipe->base.id == ingredient->base.id) {
+		if (ingredient != NULL && recipe->base.id == ingredient->recipe_id) {
 			store_freeobj(RT_INGREDIENT, i);
 		}
 	}
 
-	for (i = 0, len = store_getlen(RT_STEP); i < len; i++) {
+	for (i = 1, len = store_getlen(RT_STEP); i <= len; i++) {
 		step_t *step;
 		step = store_getobj(RT_STEP, i);
-		if (recipe->base.id == step->base.id) {
+		if (step != NULL && recipe->base.id == step->recipe_id) {
 			store_freeobj(RT_STEP, i);
 		}
 	}
 
-	for (i = 0, len = store_getlen(RT_TAG); i < len; i++) {
+	for (i = 1, len = store_getlen(RT_TAG); i <= len; i++) {
 		tag_t *tag;
 		tag = store_getobj(RT_TAG, i);
-		if (recipe->base.id == tag->base.id) {
+		if (tag != NULL && recipe->base.id == tag->recipe_id) {
 			store_freeobj(RT_TAG, i);
 		}
 	}

@@ -167,18 +167,6 @@ function TextAreaComponent(vnode) {
         view: function(vnode) {
             const contents = [];
 
-            /*
-            const textarea = m(`textarea`, {
-                cols: cols,
-                rows: rows,
-                maxlength: maxlen,
-
-                oninput: (e) => {
-                    object[prop] = e.target.value;
-                },
-            });
-            */
-
             const textarea = m(`textarea`, props, object[prop]);
 
             contents.push(textarea);
