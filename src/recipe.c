@@ -5,8 +5,23 @@
 //
 // TODO (Brian)
 //
-// - Recipe validation needs to ensure that the time and servings formats are standardized. Right
-// now, we'll just let you stick whatever you want in a 128char string.
+// Recipe Validation:
+//
+// We're going to need to not only perform some backend validation, and give it back to the
+// user, but we're going to need to perform heaps of NULL checking mostly because we don't know if
+// someone's going to directly try to use the REST API to do CRUD operations.
+//
+// What is required:
+//   name
+//   prep_time
+//   cook_time
+//   servings
+//   ingredients
+//   steps
+//   tags
+//
+// Not Required:
+//   note
 
 #include "common.h"
 
@@ -470,9 +485,11 @@ s64 recipe_add(struct Recipe *recipe)
     strncpy(string128->string, recipe->servings, sizeof(string128->string));
     record->servings_id = string128->base.id;
 
-	string256 = store_addobj(RT_STRING256);
-	strncpy(string256->string, recipe->note, sizeof(string256->string));
-	record->note_id = string256->base.id;
+	if (recipe->note != NULL) {
+		string256 = store_addobj(RT_STRING256);
+		strncpy(string256->string, recipe->note, sizeof(string256->string));
+		record->note_id = string256->base.id;
+	}
 
 	if (recipe->note != NULL) {
 		strncpy(string256->string, recipe->note, sizeof(string256->string));
@@ -553,7 +570,9 @@ struct Recipe *recipe_get(s64 id)
 	recipe->servings = strndup(string128->string, sizeof(string128->string));
 
 	string256 = store_getobj(RT_STRING256, record->note_id);
-	recipe->note = strndup(string256->string, sizeof(string256->string));
+	if (string256 != NULL) {
+		recipe->note = strndup(string256->string, sizeof(string256->string));
+	}
 
 	// aggregate all of the ingredients
 	for (i = 1, len = store_getlen(RT_INGREDIENT); i <= len; i++) {
@@ -715,7 +734,7 @@ struct RecipeResultRecords *recipe_search(struct SearchQuery *search)
 	// For performance speedups, we'll need to compute / store an index to walk instead. For the
 	// moment, we sure do just check every single record. This really doesn't scale too well.
 
-	for (i = 0; skip > 0; i++) { // skip records that match the query parameters
+	for (i = 1; skip > 0; i++) { // skip records that match the query parameters
 		rc = recipe_search_comparator((recipe_id)i, search->text);
 		if (rc < 0) {
 			return records;
@@ -881,11 +900,8 @@ static struct Recipe *recipe_from_json(char *s)
 		return NULL;
 	}
 
+	// NOTE (Brian): notes in a recipe should be optional.
 	note = json_object_get(root, "note");
-	if (!json_is_string(note)) {
-		json_decref(root);
-		return NULL;
-	}
 
 	json_t *ingredients;
 	json_t *steps;
@@ -921,7 +937,7 @@ static struct Recipe *recipe_from_json(char *s)
 	recipe->prep_time = strdup(json_string_value(prep_time));
 	recipe->cook_time = strdup(json_string_value(cook_time));
 	recipe->servings = strdup(json_string_value(servings));
-	recipe->note = strdup(json_string_value(note));
+	recipe->note = strdup_null((char *)json_string_value(note));
 
 	for (i = 0; i < json_array_size(ingredients); i++) {
 		json_t *ingredient;
@@ -994,7 +1010,7 @@ static char *recipe_to_json(struct Recipe *recipe)
 
 	object = json_pack_ex(
 		&error, 0,
-		"{s:I s:s, s:s, s:s, s:s, s:s, s:o, s:o, s:o}",
+		"{s:I s:s, s:s, s:s, s:s, s:s?, s:o, s:o, s:o}",
 		"id", (json_int_t)recipe->id,
 		"name", recipe->name,
 		"prep_time", recipe->prep_time,

@@ -92,17 +92,18 @@ void *store_addobj(int type)
     lump = &handle.header.lumps[type];
     base = NULL;
 
-    // first, we scan the table for unused objects we can zero out and reuse
-    for (i = 0; i < lump->used; i++) {
+	// scan the table for records that aren't used
+	for (i = 0; i < lump->used; i++) {
         base = (void *)(((unsigned char *)handle.ptrs[type]) + lump->recsize * i);
         if (base->flags ^ OBJECT_FLAG_USED) {
-            base->id = i;
-            base->flags |= OBJECT_FLAG_USED;
-            return (void *)base;
+			base->id = i + 1;
+			base->flags |= OBJECT_FLAG_USED;
+			return base;
         }
-        base = NULL;
-    }
+	}
 
+	// if there wasn't an already allocated record, that wasn't used, we need to double the size
+	// of the array that stores records of type 'type'
     if (lump->used >= lump->allocated) { // reallocation logic
         if (lump->allocated < BUFLARGE) {
             lump->allocated *= 2;
@@ -118,6 +119,7 @@ void *store_addobj(int type)
         memset(((u8 *)handle.ptrs[type]) + used, 0, size - used);
     }
 
+	// and now that we're at the end, we just use a record at the very end
     base = (void *)(((unsigned char *)handle.ptrs[type]) + lump->recsize * lump->used);
 
     base->id = lump->used++ + 1;
@@ -142,7 +144,7 @@ void store_freeobj(int type, u64 id)
 
     base = (void *)(((unsigned char *)handle.ptrs[type]) + lump->recsize * id);
 
-    base->flags &= ~(OBJECT_FLAG_USED);
+	memset(base, 0, lump->recsize);
 }
 
 // store_getlen : returns the length of the table describe in 'type'
