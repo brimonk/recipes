@@ -681,7 +681,7 @@ int recipe_search_comparator(recipe_id id, char *text)
 
 	recipe = store_getobj(RT_RECIPE, id);
 	if (recipe == NULL) {
-		return -1;
+		return 0;
 	}
 
 	// NOTE (Brian): an empty object, not in use, doesn't match any search criteria
@@ -762,7 +762,7 @@ struct RecipeResultRecords *recipe_search(struct SearchQuery *search)
 		// NOTE (Brian): these are pointer fetches, so they should always be pretty quick...
 		recipe = store_getobj(RT_RECIPE, i);
 		if (recipe == NULL) {
-			break;
+			continue;
 		}
 
 		name = store_getobj(RT_STRING128, recipe->name_id);
