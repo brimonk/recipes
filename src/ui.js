@@ -230,15 +230,7 @@ function ListComponent(vnode) {
         type = "ul";
     }
 
-    const header = m("p", {
-        class: "mui-col-md-2",
-        style: "font-size: larger; display: inline-block; padding-right: 1em;"
-    }, m("b", name));
-
-    const add = ButtonPrimary("+", {
-        class: "mui-col-md-2",
-        style: "display: inline-block"
-    }, () => list.push(""));
+    const add = ButtonPrimary(`Add ${name}`, () => list.push(""));
 
     const viewfn = function(innervnode) {
         const items = list.map((e, i, a) => {
@@ -252,49 +244,47 @@ function ListComponent(vnode) {
         const items = list.map((e, i, a) => {
             const is_last = i === a.length - 1;
 
-            const content = m(TextAreaComponent, {
-                object: a, prop: i, rows: 3, maxlen: 128
-            });
+            const container = [];
 
-            const sub = ButtonAccent("-", () => list.splice(i, 1));
+            const textarea = m("div", { class: "mui-col-md-8" }, m(TextAreaComponent, {
+                object: a, prop: i, rows: 3, maxlen: 128, label: `${name} ${i + 1}`
+            }));
+
+            const buttons = [];
+
+            const sub = m("button[type=button]", {
+                class: "mui-btn mui-btn--raised mui-btn--accent mui-col-md-1",
+                onclick: () => list.splice(i, 1)
+            }, "-");
 
             // NOTE (Brian): With the button handlers, we always swap the item for the one before /
             // after it in the array. We ASSUME, that these buttons won't be shown on the first or
             // last items in the list.
 
-            const up = Button("\u25B2", () => {
-                [a[i - 1], a[i]] = [a[i], a[i - 1]];
-            });
+            const up = Button("\u25B2", () => [a[i - 1], a[i]] = [a[i], a[i - 1]]);
 
-            const down = Button("\u25BC", () => {
-                [a[i + 1], a[i]] = [a[i], a[i + 1]];
-            });
+            const down = Button("\u25BC", () => [a[i + 1], a[i]] = [a[i], a[i + 1]]);
 
-            let controls = [ content ];
+            container.push(textarea);
 
             if (a.length > 1) {
-                controls.push(sub);
+                buttons.push(sub);
 
                 if (0 < i) {
-                    controls.push(up);
+                    buttons.push(up);
                 }
 
                 if (i < a.length - 1) {
-                    controls.push(down);
+                    buttons.push(down);
                 }
             }
 
-            return m("li", controls);
+            container.push(m("div", { class: "mui-col-md-4" }, buttons));
+
+            return m("div", { class: "mui-row" }, container);
         });
 
-        const controls = m("div", {
-            class: "mui-row",
-            style: "width: 100%"
-        }, [
-            Row([header, add]), items
-        ]);
-
-        return controls;
+        return m("div", [ items, add ]);
     }
 
     return {
@@ -463,19 +453,16 @@ function RecipeViewComponent(vnode) {
                         H3("Servings"),
                         P(recipe.servings),
 
-                        // H3("Ingredients"),
                         m(ListComponent, {
-                            name: "Ingredients", list: recipe.ingredients, type: "ul", isview: true
+                            name: "Ingredient", list: recipe.ingredients, type: "ul", isview: true
                         }),
 
-                        H3("Steps"),
                         m(ListComponent, {
-                            list: recipe.steps, type: "ol", isview: true
+                            name: "Step", list: recipe.steps, type: "ol", isview: true
                         }),
 
-                        H3("Tags"),
                         m(ListComponent, {
-                            list: recipe.tags, type: "ul", isview: true
+                            name: "Tag", list: recipe.tags, type: "ul", isview: true
                         }),
 
                         notesComponent,
@@ -531,15 +518,15 @@ function RecipeEditComponent(vnode) {
             });
 
             let ingredients_ctrl = m(ListComponent, {
-                list: recipe.ingredients, type: "ul", name: "Ingredients"
+                list: recipe.ingredients, type: "ul", name: "Ingredient"
             });
 
             let steps_ctrl = m(ListComponent, {
-                list: recipe.steps, type: "ol", name: "Steps"
+                list: recipe.steps, type: "ol", name: "Step"
             });
 
             let tags_ctrl = m(ListComponent, {
-                list: recipe.tags, type: "ul", name: "Tags"
+                list: recipe.tags, type: "ul", name: "Tag"
             });
 
             let log_button = Button("Dump Object State", (e) => console.log(recipe));
@@ -571,9 +558,8 @@ function RecipeEditComponent(vnode) {
             return [
                 m(MenuComponent),
 
-                H2(id ? recipe.name : "New Recipe"),
-
                 m("div", { class: "mui-container-fluid" }, [
+                    H2(!id ? "New Recipe" : null),
                     m("div", { class: "mui-row" }, [
                         m("div", { class: "mui-col-md-12" }, name_ctrl)
                     ]),
