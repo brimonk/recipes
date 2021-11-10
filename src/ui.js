@@ -42,6 +42,16 @@ function DIV(arg) {
     return m("div", arg);
 }
 
+// Row : returns a row
+function Row(arg) {
+    return m("div", { class: "mui-row" }, arg);
+}
+
+// Col : returns a col
+function Col(arg) {
+    throw new Error("not implemented");
+}
+
 // Divider : returns a content divider
 function Divider() {
     return m("div", { class: "mui-divider" });
@@ -210,6 +220,7 @@ function ListComponent(vnode) {
     let list = vnode.attrs.list;
     let type = vnode.attrs.type;
     let isview = vnode.attrs.isview ?? false;
+    let name = vnode.attrs.name;
 
     if (list.length === 0) {
         list.push("");
@@ -219,9 +230,15 @@ function ListComponent(vnode) {
         type = "ul";
     }
 
-    const header = H3(name);
+    const header = m("p", {
+        class: "mui-col-md-2",
+        style: "font-size: larger; display: inline-block; padding-right: 1em;"
+    }, m("b", name));
 
-    const add = ButtonPrimary("+", () => list.push(""));
+    const add = ButtonPrimary("+", {
+        class: "mui-col-md-2",
+        style: "display: inline-block"
+    }, () => list.push(""));
 
     const viewfn = function(innervnode) {
         const items = list.map((e, i, a) => {
@@ -270,9 +287,14 @@ function ListComponent(vnode) {
             return m("li", controls);
         });
 
-        let controls = [ m("div", [ header, add ]), items ];
+        const controls = m("div", {
+            class: "mui-row",
+            style: "width: 100%"
+        }, [
+            Row([header, add]), items
+        ]);
 
-        return m(type, controls);
+        return controls;
     }
 
     return {
@@ -441,7 +463,7 @@ function RecipeViewComponent(vnode) {
                         H3("Servings"),
                         P(recipe.servings),
 
-                        H3("Ingredients"),
+                        // H3("Ingredients"),
                         m(ListComponent, {
                             name: "Ingredients", list: recipe.ingredients, type: "ul", isview: true
                         }),
@@ -509,15 +531,15 @@ function RecipeEditComponent(vnode) {
             });
 
             let ingredients_ctrl = m(ListComponent, {
-                list: recipe.ingredients, type: "ul",
+                list: recipe.ingredients, type: "ul", name: "Ingredients"
             });
 
             let steps_ctrl = m(ListComponent, {
-                list: recipe.steps, type: "ol",
+                list: recipe.steps, type: "ol", name: "Steps"
             });
 
             let tags_ctrl = m(ListComponent, {
-                list: recipe.tags, type: "ul",
+                list: recipe.tags, type: "ul", name: "Tags"
             });
 
             let log_button = Button("Dump Object State", (e) => console.log(recipe));
@@ -560,9 +582,9 @@ function RecipeEditComponent(vnode) {
                         m("div", { class: "mui-col-md-4" }, cook_time_ctrl),
                         m("div", { class: "mui-col-md-4" }, servings_ctrl),
                     ]),
-                    H3("Ingredients"), ingredients_ctrl,
-                    H3("Steps"), steps_ctrl,
-                    H3("Tags"), tags_ctrl,
+                    ingredients_ctrl,
+                    steps_ctrl,
+                    tags_ctrl,
                     notes_ctrl,
 
                     DIV(buttons)
