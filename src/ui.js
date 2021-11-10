@@ -417,6 +417,17 @@ function RecipeViewComponent(vnode) {
             if (recipe.isLoading) {
                 content = m("p", "Now Loading...");
             } else {
+                let notesComponent;
+
+                if (recipe.notes) {
+                    notesComponent = DIV([
+                        H3("Notes"),
+                        m("p", recipe.note),
+                    ]);
+                } else {
+                    notesComponent = null;
+                }
+
                 content = [
                     H2(recipe.name),
 
@@ -445,8 +456,7 @@ function RecipeViewComponent(vnode) {
                             list: recipe.tags, type: "ul", isview: true
                         }),
 
-                        H3("Notes"),
-                        m("p", recipe.note),
+                        notesComponent,
 
                         Button("Edit", (e) => m.route.set(`/recipe/${recipe.id}/edit`))
                     ])
@@ -539,7 +549,7 @@ function RecipeEditComponent(vnode) {
             return [
                 m(MenuComponent),
 
-                H3(id ? recipe.name : "New Recipe"),
+                H2(id ? recipe.name : "New Recipe"),
 
                 m("div", { class: "mui-container-fluid" }, [
                     m("div", { class: "mui-row" }, [
@@ -550,9 +560,9 @@ function RecipeEditComponent(vnode) {
                         m("div", { class: "mui-col-md-4" }, cook_time_ctrl),
                         m("div", { class: "mui-col-md-4" }, servings_ctrl),
                     ]),
-                    H4("Ingredients"), ingredients_ctrl,
-                    H4("Steps"), steps_ctrl,
-                    H4("Tags"), tags_ctrl,
+                    H3("Ingredients"), ingredients_ctrl,
+                    H3("Steps"), steps_ctrl,
+                    H3("Tags"), tags_ctrl,
                     notes_ctrl,
 
                     DIV(buttons)
