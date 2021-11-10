@@ -11,7 +11,7 @@ JS=$(wildcard src/*.js)
 
 all: $(TARGET) html/ui.js
 
-watch:
+watch: all
 	while [ true ] ; do \
 		pkill $(TARGET) ; \
 		make ; \
@@ -19,6 +19,9 @@ watch:
 		inotifywait src -e MODIFY -e CREATE ; \
 	done ; \
 	true
+
+run: all
+	./$(TARGET) recipe.db
 
 %.d: %.c
 	@$(CC) $(CFLAGS) $< -MM -MT $(@:.d=.o) >$@

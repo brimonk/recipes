@@ -815,7 +815,7 @@ int recipe_validation(struct Recipe *recipe)
 		return -1;
 	}
 
-	if (recipe->name == NULL || 128 < strlen(recipe->name)) {
+	if (recipe->name == NULL || 128 <= strlen(recipe->name)) {
 		return -1;
 	}
 
@@ -831,11 +831,15 @@ int recipe_validation(struct Recipe *recipe)
 		return -1;
 	}
 
+	if (recipe->note != NULL && 256 <= strlen(recipe->note)) {
+		return -1;
+	}
+
 	if (ARRSIZE(recipe->ingredients) < recipe->ingredients_len) {
 		return -1;
 	}
 	for (i = 0; i < recipe->ingredients_len; i++) {
-		if (128 < strlen(recipe->ingredients[i])) {
+		if (128 <= strlen(recipe->ingredients[i])) {
 			return -1;
 		}
 	}
@@ -844,7 +848,7 @@ int recipe_validation(struct Recipe *recipe)
 		return -1;
 	}
 	for (i = 0; i < recipe->steps_len; i++) {
-		if (128 < strlen(recipe->steps[i])) {
+		if (128 <= strlen(recipe->steps[i])) {
 			return -1;
 		}
 	}
@@ -853,7 +857,7 @@ int recipe_validation(struct Recipe *recipe)
 		return -1;
 	}
 	for (i = 0; i < recipe->tags_len; i++) {
-		if (128 < strlen(recipe->tags[i])) {
+		if (128 <= strlen(recipe->tags[i])) {
 			return -1;
 		}
 	}

@@ -81,8 +81,13 @@ function InputComponent(vnode) {
     let prop = vnode.attrs.prop;
     let label = vnode.attrs.label;
     let type = vnode.attrs.type;
+    let maxlen = vnode.attrs.maxlen;
 
-    const types = [ "text", "number", "email", "password" ];
+    // NOTE (Brian): at one point, the InputComponent supported binding values back to a number
+    // (integer / float) on the referenced object, but we kinda dropped that when everything
+    // effectively became a string.
+
+    const types = [ "text", "email", "password" ];
 
     if (!type) {
         type = "text";
@@ -101,22 +106,24 @@ function InputComponent(vnode) {
                 value: object[prop],
                 type: type,
                 oninput: (e) => {
-                    if (type === "number") {
-                        const strval = e.target.value.replace(/\D/g, "");
-                        if (strval === "") {
-                            object[prop] = null;
-                        } else {
-                            object[prop] = parseInt(strval);
-                        }
-                    } else if (type === "email") {
-                        object[prop] = e.target.value.replace(/ /g, "");
-                    } else {
-                        object[prop] = e.target.value;
+                    let value = e.target.value;
+
+                    if (maxlen < (value?.length ?? 0)) {
+                        value = value.substr(0, maxlen);
                     }
+
+                    if (type === "email") {
+                        value = value.replace(/ /g, "");
+                    }
+
+                    object[prop] = value;
                 },
             });
 
+            const characters = m(`div`, `${(object[prop]?.length ?? 0)} / ${maxlen}`);
+
             contents.push(input);
+            contents.push(characters);
 
             if (label) {
                 contents.push(m("label", label));
@@ -158,18 +165,36 @@ function TextAreaComponent(vnode) {
         props["maxlen"] = +maxlen;
     }
 
+    const inputlen = (x) => x?.length ?? 0;
+
     props["value"] = object[prop];
+
+    props["len"] = inputlen(props["value"]);
+
     props["oninput"] = (e) => {
-        object[prop] = e.target.value;
+        let value = e.target.value;
+        let len = inputlen(value);
+
+        const maxlen = props["maxlen"];
+
+        if (maxlen < len) {
+            value = value.substr(0, maxlen);
+            len = inputlen(value);
+        }
+
+        object[prop] = value;
+        props["len"] = len;
     };
 
     return {
-        view: function(vnode) {
+        view: (vnode) => {
             const contents = [];
 
             const textarea = m(`textarea`, props, object[prop]);
+            const characters = m(`div`, `${props["len"]} / ${props["maxlen"]}`);
 
             contents.push(textarea);
+            contents.push(characters);
 
             if (label) {
                 contents.push(m("label", label));
@@ -210,15 +235,9 @@ function ListComponent(vnode) {
         const items = list.map((e, i, a) => {
             const is_last = i === a.length - 1;
 
-            /*
-            const content = m("input", {
-                autocomplete: "nope",
-                value: a[i],
-                oninput: (e) => a[i] = e.target.value,
+            const content = m(TextAreaComponent, {
+                object: a, prop: i, rows: 3, maxlen: 128
             });
-            */
-
-            const content = m(TextAreaComponent, { object: a, prop: i, rows: 3 });
 
             const sub = ButtonAccent("-", () => list.splice(i, 1));
 
@@ -460,19 +479,19 @@ function RecipeEditComponent(vnode) {
 
             // testing just with the name
             let name_ctrl = m(InputComponent, {
-                object: recipe, prop: "name", label: "Name"
+                object: recipe, prop: "name", label: "Name", maxlen: 128
             });
 
             let cook_time_ctrl = m(InputComponent, {
-                object: recipe, prop: "cook_time", label: "Cook Time (HH:MM)"
+                object: recipe, prop: "cook_time", label: "Cook Time (HH:MM)", maxlen: 128
             });
 
             let prep_time_ctrl = m(InputComponent, {
-                object: recipe, prop: "prep_time", label: "Prep Time (HH:MM)"
+                object: recipe, prop: "prep_time", label: "Prep Time (HH:MM)", maxlen: 128
             });
 
             let servings_ctrl = m(InputComponent, {
-                object: recipe, prop: "servings", label: "Servings"
+                object: recipe, prop: "servings", label: "Servings", maxlen: 128
             });
 
             let notes_ctrl = m(TextAreaComponent, {
@@ -846,11 +865,11 @@ function LoginComponent(inivialVnode) {
     return {
         view: function(vnode) {
             let email = m(InputComponent, {
-                object: user, prop: "email", label: "Email", type: "email",
+                object: user, prop: "email", label: "Email", type: "email", maxlen: 128
             });
 
             let password = m(InputComponent, {
-                object: user, prop: "password", label: "Password", type: "password",
+                object: user, prop: "password", label: "Password", type: "password", maxlen: 128
             });
 
             let buttons = [
@@ -886,19 +905,19 @@ function NewUserComponent(vnode) {
     return {
         view: function(vnode) {
             let username = m(InputComponent, {
-                object: user, prop: "username", label: "Username",
+                object: user, prop: "username", label: "Username", maxlen: 128
             });
 
             let email = m(InputComponent, {
-                object: user, prop: "email", label: "Email", type: "email",
+                object: user, prop: "email", label: "Email", type: "email", maxlen: 128
             });
 
             let password = m(InputComponent, {
-                object: user, prop: "password", label: "Password", type: "password",
+                object: user, prop: "password", label: "Password", type: "password", maxlen: 128
             });
 
             let verify = m(InputComponent, {
-                object: user, prop: "verify", label: "Verify Password", type: "password",
+                object: user, prop: "verify", label: "Verify Password", type: "password", maxlen: 128
             });
 
             let buttons = [
