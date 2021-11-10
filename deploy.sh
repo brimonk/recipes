@@ -12,4 +12,5 @@ DIR="/var/www/recipes.chrzanowski.me"
 
 ssh ${REMOTE} "cd ${DIR} ; git fetch"
 ssh ${REMOTE} "cd ${DIR} ; git pull origin master"
+ssh ${REMOTE} "cd ${DIR} ; ./backup.sh"
 
