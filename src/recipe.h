@@ -38,6 +38,7 @@ struct RecipeResultRecord {
 
 // RecipeResultRecords : an aggregation of results from a search
 struct RecipeResultRecords {
+    s64 matches;
 	struct RecipeResultRecord *records;
 	size_t records_len, records_cap;
 };

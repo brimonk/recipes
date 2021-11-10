@@ -16,6 +16,12 @@ int store_initialize(void);
 // store_getlen : returns the length of the table describe in 'type'
 s64 store_getlen(int type);
 
+// store_isfree : returns true if the record is free at index 'idx'
+int store_isfree(int type, s64 idx);
+
+// store_isused : returns true if the record is in use
+int store_isused(int type, s64 idx);
+
 // store_getversion : returns the version
 u64 store_getversion();
 

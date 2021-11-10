@@ -179,6 +179,32 @@ s64 store_getlen(int type)
     return lump->used;
 }
 
+// store_isfree : returns true if the record is free at index 'idx'
+int store_isfree(int type, s64 idx)
+{
+    objectbase_t *base;
+
+    base = store_getobj(type, idx);
+    if (base == NULL) {
+        return 0;
+    }
+
+    return !(base->flags & OBJECT_FLAG_USED);
+}
+
+// store_isused : returns true if the record is in use
+int store_isused(int type, s64 idx)
+{
+    objectbase_t *base;
+
+    base = store_getobj(type, idx);
+    if (base == NULL) {
+        return 0;
+    }
+
+    return base->flags & OBJECT_FLAG_USED;
+}
+
 // store_getversion : returns the version
 u64 store_getversion()
 {

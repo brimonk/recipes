@@ -588,13 +588,23 @@ function SearchComponent(vnode) {
     let results = [];
     let isLoading = true;
 
-    // NOTE (Brian): we probably want a semi-smart way of handling these default values
+    // TODO (Brian):
+    //
+    // It'd be great if the table had the "No results!" message in the middle of the table, _with_
+    // the columns present.
+    //
+    // We should maybe only give parameters when they're filled with data and such.
+    //
+    // The "First-Last of Total" in the pagination bar seems a little shitty.
 
     const query = {
         text: "",
         pageSize: 20,
         pageNumber: 0,
+        total: 0
     };
+
+    const elementQuantities = [ 5, 10, 20, 50, 100 ];
 
     // doSearch : this function sets up the request and returns a Promise for it
     const doSearch = () => {
@@ -613,8 +623,8 @@ function SearchComponent(vnode) {
     // enterHandler : does the searching, and hooks back up the search results
     const enterHandler = () => {
         doSearch().then((x) => {
-            results = x;
-            console.log(results);
+            query.total = x.total;
+            results = x.results;
             m.redraw();
         }).catch((err) => {
             console.error(err);
@@ -631,33 +641,85 @@ function SearchComponent(vnode) {
             return m("p", "Loading...");
         }
 
-        if (results.length === 0) {
-            // TODO (Brian): display the no results thing
-            return m("p", "No results!");
-        } else {
-            return m("table", { class: "mui-table" }, [
-                m("thead", [
-                    m("tr", [
-                        m("th", "Name"),
-                        m("th", "Prep Time"),
-                        m("th", "Cook Time"),
-                        m("th", "Servings"),
-                    ])
-                ]),
-                m("tbody",
-                    results.map((e) => {
-                        return m("tr", [
-                            m("td", m(m.route.Link, {
-                                href: `/recipe/${e.id}`
-                            }, e.name)),
-                            m("td", e.prep_time),
-                            m("td", e.cook_time),
-                            m("td", e.servings),
-                        ]);
-                    })
-                )
-            ])
+        let startidx, endidx;
+
+        startidx = query.pageSize * query.pageNumber + 1;
+        endidx = (query.pageSize * (query.pageNumber + 1));
+
+        if (query.total < endidx) {
+            endidx = query.total;
         }
+
+        if (endidx === 0) {
+            startidx = 0;
+        }
+
+        const table = m("table", { class: "mui-table" }, [
+            m("thead", [
+                m("tr", [
+                    m("th", "Name"),
+                    m("th", "Prep Time"),
+                    m("th", "Cook Time"),
+                    m("th", "Servings"),
+                ])
+            ]),
+            m("tbody",
+                results.map((e) => {
+                    return m("tr", [
+                        m("td", m(m.route.Link, {
+                            href: `/recipe/${e.id}`
+                        }, e.name)),
+                        m("td", e.prep_time),
+                        m("td", e.cook_time),
+                        m("td", e.servings),
+                    ]);
+                })
+            )
+        ]);
+
+        return m("div", [
+            (results.length === 0 ? m("p", "No results!") : table),
+            m("div", { class: "mui-row", style: "background: lightgray; padding: 8px" }, [
+
+                // NOTE (Brian): this monstrosity is to show the page size selector
+                m("div", { class: "mui-col-md-4 mui-dropdown" }, [
+                    m("button", { class: "mui-btn mui-btn--raised", "data-mui-toggle": "dropdown" }, [
+                        `Items Per Page: ${query.pageSize}`, m("span", { class: "mui-caret" })
+                    ]),
+                    m("ul", { class: "mui-dropdown__menu" },
+                        elementQuantities.map((x) => m("li", m("a", {
+                            href: "#",
+                            onclick: (e) => {
+                                query.pageSize = x;
+                                enterHandler();
+                            }
+                        }, x)))
+                    )
+
+                ]),
+
+                // NOTE (Brian): Now we can display information like top-bottom of total
+                // and control arrows
+                m("p", { class: "mui-col-md-1" },
+                    `${startidx}-${endidx} of ${query.total}`),
+                m("button", {
+                    class: "mui-col-md-1 mui-btn", onclick: (e) => {
+                        if (query.pageNumber > 0) {
+                            query.pageNumber--;
+                            enterHandler();
+                        }
+                    }
+                }, "\u2039"),
+                m("button", {
+                    class: "mui-col-md-1 mui-btn", onclick: (e) => {
+                        if (query.pageNumber < Math.floor(query.total / query.pageSize)) {
+                            query.pageNumber++;
+                            enterHandler();
+                        }
+                    }
+                }, "\u203a")
+            ])
+        ]);
     };
 
     enterHandler(); // like we performed a blank search at the start of the page
