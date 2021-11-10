@@ -246,14 +246,14 @@ function ListComponent(vnode) {
 
             const container = [];
 
-            const textarea = m("div", { class: "mui-col-md-8" }, m(TextAreaComponent, {
+            const textarea = m("div", { class: "mui-col-md-10 mui-col-xs-12" }, m(TextAreaComponent, {
                 object: a, prop: i, rows: 3, maxlen: 128, label: `${name} ${i + 1}`
             }));
 
             const buttons = [];
 
             const sub = m("button[type=button]", {
-                class: "mui-btn mui-btn--raised mui-btn--accent mui-col-md-1",
+                class: "mui-btn mui-btn--raised mui-btn--accent",
                 onclick: () => list.splice(i, 1)
             }, "-");
 
@@ -279,7 +279,7 @@ function ListComponent(vnode) {
                 }
             }
 
-            container.push(m("div", { class: "mui-col-md-4" }, buttons));
+            container.push(m("div", { class: "mui-col-md-2 mui-col-xs-6" }, buttons));
 
             return m("div", { class: "mui-row" }, container);
         });
