@@ -574,10 +574,12 @@ struct Recipe *recipe_get(s64 id)
 		recipe->note = strndup(string256->string, sizeof(string256->string));
 	}
 
+    // NOTE (Brian): the wrapping NULL checks make sure the item is actually in use
+
 	// aggregate all of the ingredients
 	for (i = 1, len = store_getlen(RT_INGREDIENT); i <= len; i++) {
 		ingredient = store_getobj(RT_INGREDIENT, i);
-		if (recipe->id == ingredient->recipe_id) {
+		if (ingredient != NULL && recipe->id == ingredient->recipe_id) {
 			string128 = store_getobj(RT_STRING128, ingredient->string_id);
 
 			recipe->ingredients[recipe->ingredients_len++] =
@@ -588,7 +590,7 @@ struct Recipe *recipe_get(s64 id)
 	// aggregate all of the steps
 	for (i = 1, len = store_getlen(RT_STEP); i <= len; i++) {
 		step = store_getobj(RT_STEP, i);
-		if (recipe->id == step->recipe_id) {
+		if (step != NULL && recipe->id == step->recipe_id) {
 			string128 = store_getobj(RT_STRING128, step->string_id);
 
 			recipe->steps[recipe->steps_len++] =
@@ -599,7 +601,7 @@ struct Recipe *recipe_get(s64 id)
 	// aggregate all of the tags
 	for (i = 1, len = store_getlen(RT_TAG); i <= len; i++) {
 		tag = store_getobj(RT_TAG, i);
-		if (recipe->id == tag->recipe_id) {
+		if (tag != NULL && recipe->id == tag->recipe_id) {
 			string128 = store_getobj(RT_STRING128, tag->string_id);
 
 			recipe->tags[recipe->tags_len++] =
