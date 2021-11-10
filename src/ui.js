@@ -237,7 +237,10 @@ function ListComponent(vnode) {
             return m("li", a[i]);
         });
 
-        return m(type, items);
+        return m("div", [
+            m("h3", `${name}s`),
+            m(type, items)
+        ]);
     }
 
     const inputfn = function(innervnode) {
