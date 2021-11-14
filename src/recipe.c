@@ -1022,7 +1022,7 @@ static char *recipe_to_json(struct Recipe *recipe)
 
 	object = json_pack_ex(
 		&error, 0,
-		"{s:I s:s, s:s, s:s, s:s, s:s?, s:o, s:o, s:o}",
+		"{s:I, s:s, s:s, s:s, s:s, s:s?, s:o, s:o, s:o}",
 		"id", (json_int_t)recipe->id,
 		"name", recipe->name,
 		"prep_time", recipe->prep_time,

@@ -3,9 +3,26 @@
 
 const EMAIL_REGEX = /^(([^<>()[\]\\.,;:\s@\"]+(\.[^<>()[\]\\.,;:\s@\"]+)*)|(\".+\"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;
 
-const COOKIE_DISCLAIMER = `For legal reasons, you need to accept the fact that this site requires 1
-session cookie for all operations where you might create new content.  It is impossible to opt-out
-of this cookie; however, you can still view recipes to your heart's content without using cookies.`;
+let staticData = null;
+
+// FetchStaticData : setup the cookie disclaimer
+function FetchStaticData() {
+    if (!staticData) {
+        m.request({
+            method: "GET",
+            url: `/api/v1/static`,
+        }).then((x) => {
+            staticData = x;
+        }).catch((err) => {
+            console.error(err);
+        });
+    }
+}
+
+// StaticDataOrBlank : returns the state data, or empty string
+function StaticDataOrBlank(x) {
+    return x ?? "";
+}
 
 // VError: a validation error constructor
 function VError(prop, msg) {
@@ -488,8 +505,19 @@ function RecipeEditComponent(vnode) {
     let id = m.route.param("id");
     let recipe = new Recipe(id);
 
+    m.request({
+        method: "GET",
+        url: `/api/v1/tags`,
+    }).then((x) => {
+        console.log(x);
+    }).catch((err) => {
+        console.error(err);
+    });
+
     return {
         view: function(vnode) {
+            // TEMPORARY
+
             if (recipe.isLoading) {
                 return  [
                     m(MenuComponent),
@@ -617,7 +645,7 @@ function SearchComponent(vnode) {
         return m.request({
             method: "GET",
             url: `/api/v1/recipe/list?${qString}`,
-        })
+        });
     };
 
     // enterHandler : does the searching, and hooks back up the search results
@@ -945,6 +973,8 @@ function LoginComponent(inivialVnode) {
         context: "login"
     };
 
+    FetchStaticData();
+
     return {
         view: function(vnode) {
             let email = m(InputComponent, {
@@ -973,7 +1003,7 @@ function LoginComponent(inivialVnode) {
 
                 DIV(buttons),
 
-                P(COOKIE_DISCLAIMER),
+                P(StaticDataOrBlank(staticData?.cookieDisclaimer)),
             ];
         },
     };
@@ -984,6 +1014,8 @@ function NewUserComponent(vnode) {
     const user = {
         context: "newuser"
     };
+
+    FetchStaticData();
 
     return {
         view: function(vnode) {
@@ -1023,7 +1055,7 @@ function NewUserComponent(vnode) {
 
                 DIV(buttons),
 
-                P(COOKIE_DISCLAIMER),
+                P(StaticDataOrBlank(staticData?.cookieDisclaimer)),
             ];
         },
     };

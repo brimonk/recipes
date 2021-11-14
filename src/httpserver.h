@@ -856,6 +856,7 @@ http_token_t hs_transition_action(
 		hs_stream_anchor(stream);
 	}
 	if (from != to) {
+        assert(0 <= to && to < ARRSIZE(hs_token_start_states));
 		int type = hs_token_start_states[to];
 		if (type != HS_TOK_NONE) hs_stream_begin_token(stream, type);
 		if (from == CS) hs_trigger_meta(parser, HS_META_END_CHK_SIZE);

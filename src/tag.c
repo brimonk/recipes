@@ -43,12 +43,11 @@ int tag_api_getlist(struct http_request_s *req, struct http_response_s *res)
 
 		tag = store_getobj(RT_TAG, i);
 		if (tag == NULL)
-			break;
+            continue;
 
 		string128 = store_getobj(RT_STRING128, tag->string_id);
 		if (string128 == NULL)
-			break;
-
+            continue;
 
 		tags[tags_len] = strndup(string128->string, sizeof(string128->string));
 		json_array_append_new(array, json_string(tags[tags_len]));

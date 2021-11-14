@@ -1,5 +1,16 @@
 // Brian Chrzanowski
 // 2021-06-08 20:04:01
+//
+// TODO (Brian)
+// - New User
+// - Login
+// - Session Cookies
+// - All Strings are in a HashMap
+// - Timing Regex (Frontend / Backend)
+// - HTTP Parsing Bug (Why?) (Library doesn't handle malformed inputs?)
+//
+// - Tags are a Dropdown
+//   I'm not sure how to actually make this look good on mobile.
 
 #define COMMON_IMPLEMENTATION
 #include "common.h"
@@ -14,12 +25,14 @@
 
 #include <magic.h>
 #include <sodium.h>
+#include <jansson.h>
 
 #include "objects.h"
 #include "ht.h"
 #include "migrations.h"
 
 #include "recipe.h"
+#include "tag.h"
 #include "user.h"
 
 #define PORT (2000)
@@ -37,11 +50,16 @@ void request_handler(struct http_request_s *req);
 // rcheck: returns true if the route in req matches the path and method
 int rcheck(struct http_request_s *req, char *target, char *method);
 
-// send_style: sends the style sheet, and ensures the correct mime type is sent
-int send_style(struct http_request_s *req, struct http_response_s *res);
-
-// send_file: sends the file in the request, coalescing to '/index.html' from "html/"
-int send_file(struct http_request_s *req, struct http_response_s *res);
+// send_file_static : sends the static data JSON blob
+int send_file_static(struct http_request_s *req, struct http_response_s *res);
+// send_file_uijs : sends the javascript for the ui to the user
+int send_file_uijs(struct http_request_s *req, struct http_response_s *res);
+// send_file_styles : sends the styles file to the user
+int send_file_styles(struct http_request_s *req, struct http_response_s *res);
+// send_file_index : sends the index file to the user
+int send_file_index(struct http_request_s *req, struct http_response_s *res);
+// send_file_path : sends a file to the user at path 'path'
+int send_file_path(struct http_request_s *req, struct http_response_s *res, char *path);
 
 // send_error: sends an error
 int send_error(struct http_request_s *req, struct http_response_s *res, int errcode);
@@ -110,10 +128,12 @@ int main(int argc, char **argv)
 	ht_set(routes, "GET /api/v1/recipe/:id", (void *)recipe_api_get);
 	ht_set(routes, "PUT /api/v1/recipe/:id", (void *)recipe_api_put);
 	ht_set(routes, "DELETE /api/v1/recipe/:id", (void *)recipe_api_delete);
-	ht_set(routes, "GET /ui.js", (void *)send_file);
-	ht_set(routes, "GET /styles.css", (void *)send_style);
-	ht_set(routes, "GET /index.html", (void *)send_file);
-	ht_set(routes, "GET /", (void *)send_file);
+	ht_set(routes, "GET /api/v1/tags", (void *)tag_api_getlist);
+	ht_set(routes, "GET /api/v1/static", (void *)send_file_static);
+	ht_set(routes, "GET /ui.js", (void *)send_file_uijs);
+	ht_set(routes, "GET /styles.css", (void *)send_file_styles);
+	ht_set(routes, "GET /index.html", (void *)send_file_index);
+	ht_set(routes, "GET /", (void *)send_file_index);
 
 	http_server_listen(server);
 
@@ -189,6 +209,8 @@ void request_handler(struct http_request_s *req)
 
 	rc = format_target_string(buf, req, sizeof buf);
 
+	printf("%s\n", buf);
+
 	res = http_response_init();
 
 	func = ht_get(routes, buf);
@@ -201,8 +223,20 @@ void request_handler(struct http_request_s *req)
 	}
 }
 
-// send_style: sends the style sheet, and ensures the correct mime type is sent
-int send_style(struct http_request_s *req, struct http_response_s *res)
+// send_file_static : sends the static data JSON blob
+int send_file_static(struct http_request_s *req, struct http_response_s *res)
+{
+	return send_file_path(req, res, "src/static.json");
+}
+
+// send_file_uijs : sends the javascript for the ui to the user
+int send_file_uijs(struct http_request_s *req, struct http_response_s *res)
+{
+	return send_file_path(req, res, "html/ui.js");
+}
+
+// send_file_styles : sends the styles file to the user
+int send_file_styles(struct http_request_s *req, struct http_response_s *res)
 {
 	char *file_data;
 	char *path;
@@ -231,40 +265,21 @@ int send_style(struct http_request_s *req, struct http_response_s *res)
 	return 0;
 }
 
-// send_file: sends the file in the request, coalescing to '/index.html' from "html/"
-int send_file(struct http_request_s *req, struct http_response_s *res)
+// send_file_index : sends the index file to the user
+int send_file_index(struct http_request_s *req, struct http_response_s *res)
 {
-	struct http_string_s target;
+	return send_file_path(req, res, "html/index.html");
+}
+
+// send_file_path : sends a file to the user at path 'path'
+int send_file_path(struct http_request_s *req, struct http_response_s *res, char *path)
+{
 	char *file_data;
 	char *mime_type;
-	char *requested;
-	char *path;
 	size_t len;
 
 	// NOTE (Brian): To make this routing fit well in a hashtable (hopefully, to make routing
 	// easier), this function distributes the two static files that we give a shit about.
-
-	path = NULL;
-
-	target = http_request_target(req);
-
-	requested = strndup(target.buf, target.len);
-
-	if (streq("/ui.js", requested)) {
-		path = "html/ui.js";
-	} else if (streq("/styles.css", requested)) {
-		path = "html/styles.css";
-	} else if (streq("/index.html", requested)) {
-		path = "html/index.html";
-	} else if (streq("/", requested)) {
-		path = "html/index.html";
-	}
-
-	free(requested);
-
-	if (path == NULL) {
-		return -1;
-	}
 
 	if (access(path, F_OK) == 0) {
 		file_data = sys_readfile(path, &len);
