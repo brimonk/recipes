@@ -9,8 +9,28 @@
 // - Timing Regex (Frontend / Backend)
 // - HTTP Parsing Bug (Why?) (Library doesn't handle malformed inputs?)
 //
+// - Performance Tests
+//
+//   Full Recipe Tests:
+//     - x1000 Recipes
+//     - Create
+//     - Read (Search)
+//     - Read (Individual)
+//     - Update
+//     - Read (Search)
+//     - Read (Individual)
+//     - Delete
+//
+//   Full User Tests:
+//     - 1000 Users
+//     - Create
+//     - Login
+//
 // - Tags are a Dropdown
 //   I'm not sure how to actually make this look good on mobile.
+//
+// - Remove existing migration code, and remake migrations, one file each, so data structures can be
+//   redefined for each state of the database.
 
 #define COMMON_IMPLEMENTATION
 #include "common.h"
@@ -128,7 +148,11 @@ int main(int argc, char **argv)
 	ht_set(routes, "GET /api/v1/recipe/:id", (void *)recipe_api_get);
 	ht_set(routes, "PUT /api/v1/recipe/:id", (void *)recipe_api_put);
 	ht_set(routes, "DELETE /api/v1/recipe/:id", (void *)recipe_api_delete);
+
+	ht_set(routes, "POST /api/v1/newuser", (void *)user_api_newuser);
+
 	ht_set(routes, "GET /api/v1/tags", (void *)tag_api_getlist);
+
 	ht_set(routes, "GET /api/v1/static", (void *)send_file_static);
 	ht_set(routes, "GET /ui.js", (void *)send_file_uijs);
 	ht_set(routes, "GET /styles.css", (void *)send_file_styles);

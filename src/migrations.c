@@ -37,8 +37,7 @@ int migration_0001(void)
 			user->username++;
 			user->email++;
 			user->password++;
-			user->verify++;
-			user->secret++;
+			user->salt++;
 		}
 	}
 

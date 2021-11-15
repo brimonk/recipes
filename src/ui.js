@@ -1037,7 +1037,16 @@ function NewUserComponent(vnode) {
 
             let buttons = [
                 ButtonPrimary("Create", (e) => {
-                    console.log("CREATE MY USER!!");
+                    m.request({
+                        method: "POST",
+                        url: "/api/v1/newuser",
+                        body: user,
+                    }).then((x) => {
+                        m.route.set("/");
+                        console.log(x);
+                    }).catch((err) => {
+                        console.error(err);
+                    });
                 }),
                 Button("Cancel", (e) => m.route.set("/"))
             ];

@@ -13,6 +13,7 @@
 #define OBJECT_FLAG_LOCKED         (0x0002)
 #define OBJECT_FLAG_VERIFIED       (0x0004)
 #define OBJECT_FLAG_PUBLISHED      (0x0008)
+#define OBJECT_FLAG_RESET          (0x0010)
 
 typedef char string_char;
 
@@ -44,17 +45,11 @@ typedef struct user_t {
 	string_128_id username;
 	string_128_id email;
 	string_128_id password;
-	string_128_id verify;
-	string_128_id secret;
+	string_128_id salt;
+    string_128_id session_secret;
 } user_t;
 
 typedef u64 user_id;
-
-// usersession_t : a (hopefully) 1:1 mapping with the user table, everyone only gets one session
-typedef struct usersession_t {
-    objectbase_t base;
-    string_128_id secret;
-} usersession_t;
 
 // recipe_id : the pk for a recipe item (just a u64 that's the array offset)
 typedef s64 recipe_id;
