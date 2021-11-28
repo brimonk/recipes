@@ -451,7 +451,7 @@ function RecipeViewComponent(vnode) {
             } else {
                 let notesComponent;
 
-                if (recipe.notes) {
+                if (recipe.note) {
                     notesComponent = DIV([
                         H3("Notes"),
                         m("p", recipe.note),
