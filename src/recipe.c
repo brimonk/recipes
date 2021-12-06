@@ -102,6 +102,7 @@ int recipe_api_post(struct mg_connection *conn, struct mg_http_message *hm)
 	mg_http_reply(conn, 200, NULL, "{\"id\":%lld}", id);
 
 	recipe_free(recipe);
+	free(body);
 
 	return 0;
 }
@@ -201,8 +202,8 @@ int recipe_api_getlist(struct mg_connection *conn, struct mg_http_message *hm)
 {
 	struct SearchQuery query;
 	char *json;
-	char *qstr;
-	char *s, *k, *v;
+	char tbuf[BUFSMALL];
+	int rc;
 
 	memset(&query, 0, sizeof query);
 
@@ -210,25 +211,27 @@ int recipe_api_getlist(struct mg_connection *conn, struct mg_http_message *hm)
 	query.page_number = 0;
 	query.text = NULL;
 
-	qstr = strndup(hm->query.ptr, hm->query.len);
+	{
+		memset(tbuf, 0, sizeof tbuf);
+		rc = mg_http_get_var(&hm->query, "siz", tbuf, sizeof tbuf);
+		if (isdigit(tbuf[0])) {
+			query.page_size = atol(tbuf);
+		}
+	}
 
-	for (s = strtok(qstr, "&"); s; s = strtok(NULL, "&")) {
-		k = s;
-		v = strchr(k, '=');
+	{
+		memset(tbuf, 0, sizeof tbuf);
+		rc = mg_http_get_var(&hm->query, "num", tbuf, sizeof tbuf);
+		if (isdigit(tbuf[0])) {
+			query.page_number = atol(tbuf);
+		}
+	}
 
-		if (v == NULL)
-			continue;
-
-		*v++ = 0;
-
-		if (streq(k, "siz")) {
-			query.page_size = atol(v);
-		} else if (streq(k, "num")) {
-			query.page_number = atol(v);
-		} else if (streq(k, "q")) {
-			query.text = v; // WARN (Brian): will this be okay if we defer freeing 'qstr'?
-		} else {
-			// TODO (Brian): handle bad parameters here
+	{
+		memset(tbuf, 0, sizeof tbuf);
+		rc = mg_http_get_var(&hm->query, "q", tbuf, sizeof tbuf - 1);
+		if (rc != 0) {
+			query.text = tbuf;
 		}
 	}
 
@@ -242,7 +245,6 @@ int recipe_api_getlist(struct mg_connection *conn, struct mg_http_message *hm)
 
 	mg_http_reply(conn, 200, NULL, "%s", json);
 
-	free(qstr);
 	free(json);
 
 	return 0;

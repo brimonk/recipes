@@ -65,6 +65,8 @@ int tag_api_getlist(struct mg_connection *conn, struct mg_http_message *hm)
 	// cleanup
 	json_decref(object);
 
+    free(s);
+
 	for (i = 0; i < tags_len; i++)
 		free(tags[i]);
 	free(tags);

@@ -5,7 +5,7 @@
 
 #include "common.h"
 
-#include "httpserver.h"
+#include "mongoose.h"
 
 #include <sodium.h>
 #include <jansson.h>
@@ -20,9 +20,6 @@
 // newuser_verify : returns true if the new user record is valid
 int newuser_verify(struct NewUser *newuser);
 
-// set_user_cookie : prints the user cookie on the response
-int set_user_cookie(struct http_response_s *res, user_id id);
-
 // newuser_from_json : converts a JSON string into a NewUser object
 struct NewUser *newuser_from_json(char *json);
 
@@ -33,17 +30,13 @@ int newuser_add(struct NewUser *newuser);
 void newuser_free(struct NewUser *newuser);
 
 // user_api_newuser: endpoint, POST - /api/v1/newuser
-int user_api_newuser(struct http_request_s *req, struct http_response_s *res)
+int user_api_newuser(struct mg_connection *conn, struct mg_http_message *hm)
 {
     struct NewUser *user;
     user_id id;
-	struct http_string_s body;
     char *json;
-	char tbuf[BUFLARGE];
 
-	body = http_request_body(req);
-
-	json = strndup(body.buf, body.len);
+	json = strndup(hm->body.ptr, hm->body.len);
 	if (json == NULL) { // return http error
         ERR("message has no body\n");
 		return -1;
@@ -72,15 +65,7 @@ int user_api_newuser(struct http_request_s *req, struct http_response_s *res)
 
     // TODO (Brian): set the user cookie here to whatever's in the user session
 
-    snprintf(tbuf, sizeof tbuf, "{\"id\":%lld}", id);
-
-    http_response_status(res, 200);
-
-    set_user_cookie(res, id);
-
-    http_response_body(res, tbuf, strlen(tbuf));
-
-    http_respond(req, res);
+    mg_http_reply(conn, 200, NULL, "{\"id\":%lld}", id);
 
     newuser_free(user);
 
@@ -88,13 +73,13 @@ int user_api_newuser(struct http_request_s *req, struct http_response_s *res)
 }
 
 // user_api_login: endpoint, POST - /api/v1/user/login
-int user_api_login(struct http_request_s *req, struct http_response_s *res)
+int user_api_login(struct mg_connection *conn, struct mg_http_message *hm)
 {
     return 0;
 }
 
 // user_api_logout: endpoint, POST - /api/v1/user/logout
-int user_api_logout(struct http_request_s *req, struct http_response_s *res)
+int user_api_logout(struct mg_connection *conn, struct mg_http_message *hm)
 {
     return 0;
 }
@@ -210,54 +195,6 @@ int newuser_add(struct NewUser *newuser)
     user_record->session_secret = session_secret->base.id;
 
     return user_record->base.id;
-}
-
-// set_user_cookie : prints the user cookie on the response
-int set_user_cookie(struct http_response_s *res, user_id id)
-{
-    struct user_t *user;
-    struct string_128_t *session_secret;
-    char gbuf[COOKIE_LEN];
-    char pbuf[BUFLARGE];
-    char cbuf[BUFLARGE + BUFLARGE];
-    size_t len;
-    int encoding_variant;
-
-    user = store_getobj(RT_USER, id);
-    if (user == NULL) {
-        return 0;
-    }
-
-    session_secret = store_getobj(RT_STRING128, user->session_secret);
-    if (session_secret == NULL) {
-        return 0;
-    }
-
-    memset(gbuf, 0, sizeof gbuf);
-    memset(pbuf, 0, sizeof pbuf);
-    memset(cbuf, 0, sizeof cbuf);
-
-    memcpy(gbuf, session_secret->string, COOKIE_LEN);
-
-    randombytes_buf(gbuf, sizeof gbuf);
-
-    encoding_variant = sodium_base64_VARIANT_URLSAFE_NO_PADDING;
-
-    len = sodium_base64_ENCODED_LEN(COOKIE_LEN, encoding_variant);
-    printf("%ld bytes needed!\n", len);
-
-    assert(len <= sizeof(pbuf));
-
-    sodium_bin2base64(pbuf, len, (unsigned char *)gbuf, sizeof gbuf, encoding_variant);
-
-    // now we finally get to call the cookie thing
-    snprintf(cbuf, sizeof cbuf, "%s=%s; Path=/", COOKIE_KEY, pbuf);
-
-    printf("trying to respond with this: %s\n", cbuf);
-
-    http_response_header(res, "Set-Cookie", cbuf);
-
-    return 1;
 }
 
 // newuser_from_json : converts a JSON string into a NewUser object
