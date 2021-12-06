@@ -191,6 +191,7 @@ int recipe_api_get(struct mg_connection *conn, struct mg_http_message *hm)
 	mg_http_reply(conn, 200, NULL, "%s", json);
 
 	free(json);
+	recipe_free(recipe);
 
 	return 0;
 }
