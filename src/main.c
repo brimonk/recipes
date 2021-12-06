@@ -40,9 +40,6 @@
 #include <unistd.h>
 #include <sys/types.h>
 
-#define HTTPSERVER_IMPL
-#include "httpserver.h"
-
 #include <magic.h>
 #include <sodium.h>
 #include <jansson.h>
@@ -72,9 +69,6 @@ void event_handler(struct mg_connection *conn, int ev, void *ev_data, void *fn_d
 // request_handler: the http request handler
 void request_handler(struct mg_connection *conn, struct mg_http_message *hm);
 
-// rcheck: returns true if the route in req matches the path and method
-int rcheck(struct http_request_s *req, char *target, char *method);
-
 // send_file_static : sends the static data JSON blob
 int send_file_static(struct mg_connection *conn, struct mg_http_message *hm);
 // send_file_uijs : sends the javascript for the ui to the user
@@ -86,9 +80,6 @@ int send_file_index(struct mg_connection *conn, struct mg_http_message *hm);
 
 // send_error: sends an error
 int send_error(struct mg_connection *conn, int errcode);
-
-// get_list: returns the list page for a given table
-int get_list(struct http_request_s *req, struct http_response_s *res, char *table);
 
 // get_codepoint: returns an integer representing the percent encoded codepoint
 int get_codepoint(char *s);
@@ -114,7 +105,6 @@ void handle_sigint(int sig)
 int main(int argc, char **argv)
 {
 	struct mg_mgr mgr;
-	int rc;
 
 	if (argc < 2) {
 		fprintf(stderr, USAGE, argv[0]);
