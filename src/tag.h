@@ -21,6 +21,8 @@
 #include "common.h"
 #include "objects.h"
 
+#include "mongoose.h"
+
 // Tag : it's just some text, that gets normalized to lower case
 struct Tag {
 	tag_id id;
@@ -42,7 +44,7 @@ struct TagResultRecords {
 };
 
 // tag_api_getlist : endpoint, GET - /api/v1/tags
-int tag_api_getlist(struct http_request_s *req, struct http_response_s *res);
+int tag_api_getlist(struct mg_connection *conn, struct mg_http_message *hm);
 
 #endif
 

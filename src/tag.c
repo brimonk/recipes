@@ -6,11 +6,11 @@
 
 #include "common.h"
 
-#include "httpserver.h"
-
 #include <sodium.h>
 #include <math.h>
 #include <jansson.h>
+
+#include "mongoose.h"
 
 #include "recipe.h"
 #include "objects.h"
@@ -19,7 +19,7 @@
 #include "tag.h"
 
 // tag_api_getlist : endpoint, GET - /api/v1/tags
-int tag_api_getlist(struct http_request_s *req, struct http_response_s *res)
+int tag_api_getlist(struct mg_connection *conn, struct mg_http_message *hm)
 {
 	tag_t *tag;
 	string_128_t *string128;
@@ -60,10 +60,7 @@ int tag_api_getlist(struct http_request_s *req, struct http_response_s *res)
 
 	s = json_dumps(object, 0);
 
-	// HTTP Response
-	http_response_status(res, 200);
-	http_response_body(res, s, strlen(s));
-	http_respond(req, res);
+    mg_http_reply(conn, 200, NULL, "%s", s);
 
 	// cleanup
 	json_decref(object);
