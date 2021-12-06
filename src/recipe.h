@@ -4,6 +4,8 @@
 #include "common.h"
 #include "objects.h"
 
+#include "mongoose.h"
+
 #define MAX_LIST_RESULTS (100)
 
 // Recipe : this is the object the user will, effectively, send us
@@ -51,19 +53,19 @@ struct SearchQuery {
 };
 
 // recipe_api_post : endpoint, POST - /api/v1/recipe
-int recipe_api_post(struct http_request_s *req, struct http_response_s *res);
+int recipe_api_post(struct mg_connection *conn, struct mg_http_message *hm);
 
 // recipe_api_put : endpoint, PUT - /api/v1/recipe/{id}
-int recipe_api_put(struct http_request_s *req, struct http_response_s *res);
+int recipe_api_put(struct mg_connection *conn, struct mg_http_message *hm);
 
 // recipe_api_get : endpoint, GET - /api/v1/recipe/{id}
-int recipe_api_get(struct http_request_s *req, struct http_response_s *res);
+int recipe_api_get(struct mg_connection *conn, struct mg_http_message *hm);
 
 // recipe_api_delete : endpoint, DELETE - /api/v1/recipe/{id}
-int recipe_api_delete(struct http_request_s *req, struct http_response_s *res);
+int recipe_api_delete(struct mg_connection *conn, struct mg_http_message *hm);
 
 // recipe_api_getlist : endpoint, GET - /api/v1/recipe/list
-int recipe_api_getlist(struct http_request_s *req, struct http_response_s *res);
+int recipe_api_getlist(struct mg_connection *conn, struct mg_http_message *hm);
 
 #endif
 

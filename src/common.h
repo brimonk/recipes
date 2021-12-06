@@ -182,7 +182,8 @@ enum {
 
 // TODO (brian): see if we can use a base macro to make this cleaner/nicer
 // TODO (brian): should all of these log to stderr? Yes, if stdout is really output... (should it be?)
-#define LOG(fmt, ...) (c_fprintf(__FILE__, __LINE__, __FUNCTION__, LOG_LOG, stderr, fmt, ##__VA_ARGS__)) // basic log message
+// NOTE (Brian): LOG is taken up by mongoose, and I really don't want to hack that together
+// #define LOG(fmt, ...) (c_fprintf(__FILE__, __LINE__, __FUNCTION__, LOG_LOG, stderr, fmt, ##__VA_ARGS__)) // basic log message
 #define MSG(fmt, ...) (c_fprintf(__FILE__, __LINE__, __FUNCTION__, LOG_MSG, stderr, fmt, ##__VA_ARGS__)) // basic log message
 #define WRN(fmt, ...) (c_fprintf(__FILE__, __LINE__, __FUNCTION__, LOG_WRN, stderr, fmt, ##__VA_ARGS__)) // warning message
 #define ERR(fmt, ...) (c_fprintf(__FILE__, __LINE__, __FUNCTION__, LOG_ERR, stderr, fmt, ##__VA_ARGS__)) // error message

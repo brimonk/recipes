@@ -25,11 +25,10 @@
 
 #include "common.h"
 
-#include "httpserver.h"
-
 #include <sodium.h>
-#include <math.h>
 #include <jansson.h>
+
+#include "mongoose.h"
 
 #include "recipe.h"
 #include "objects.h"
@@ -71,135 +70,18 @@ void search_results_free(struct RecipeResultRecords *records);
 // NOTE (Brian): I'm putting this here because I'm not sure where else it's really going to be used.
 // Feel free to move it in the future
 
-typedef struct kvpair {
-	char *k, *v;
-} kvpair;
-
-typedef struct kvpairs {
-	struct kvpair *pairs;
-	size_t pairs_len, pairs_cap;
-} kvpairs;
-
-// http_parse_query_parameters : parses http query parameters into a list of k/v pairs
-struct kvpairs *http_parse_query_parameters(char *s)
-{
-	struct kvpairs *pairs;
-	char *arr[128];
-	char *k, *v;
-	size_t i, len;
-
-	pairs = calloc(1, sizeof(*pairs));
-	if (pairs == NULL) {
-		return NULL;
-	}
-
-	s = strchr(s, '?');
-	if (s == NULL) {
-		return pairs; // empty
-	}
-
-	memset(&arr, 0, sizeof arr);
-
-	// NOTE (Brian): track the interesting chars you see, we'll deal with them a little later,
-	// because we can return NOTHING if you don't send me the correct pairs of items.
-	for (i = 0; *s && i < ARRSIZE(arr); s++) {
-		switch (*s) {
-			case '?':
-			case '&':
-			case '=':
-				arr[i++] = s;
-				break;
-			default:
-				break;
-		}
-	}
-
-	if (i % 2 != 0) {
-		return pairs; // still empty
-	}
-
-	len = i;
-
-	for (i = 0; i < len; i += 2) {
-		size_t klen, vlen;
-
-		C_RESIZE(&pairs->pairs);
-
-		k = arr[i + 0] + 1;
-		v = arr[i + 1] + 1;
-
-		klen = strcspn(k, "?=&");
-		vlen = strcspn(v, "?=&");
-
-		if (klen == 0) {
-			continue;
-		}
-
-		pairs->pairs[pairs->pairs_len].k = strndup(k, klen);
-
-		if (vlen == 0) {
-			pairs->pairs[pairs->pairs_len].v = NULL;
-		} else {
-			pairs->pairs[pairs->pairs_len].v = strndup(v, vlen);
-		}
-
-		pairs->pairs_len++;
-	}
-
-	return pairs;
-}
-
-// returns the value for a given key, or NULL if not found
-char *kvpairs_get(kvpairs *pairs, char *key)
-{
-	size_t i;
-
-	assert(pairs != NULL);
-	assert(key != NULL);
-
-	for (i = 0; i < pairs->pairs_len; i++) {
-		if (strcmp(key, pairs->pairs[i].k) == 0) {
-			return pairs->pairs[i].v;
-		}
-	}
-
-	return NULL;
-}
-
-// kvpairs_free : releases memory in the kvpairs structure
-void kvpairs_free(kvpairs *pairs)
-{
-	size_t i;
-
-	for (i = 0; i < pairs->pairs_len; i++) {
-		free(pairs->pairs[i].k);
-		free(pairs->pairs[i].v);
-	}
-
-	free(pairs->pairs);
-	free(pairs);
-}
-
 // recipe_api_post : endpoint, POST - /api/v1/recipe
-int recipe_api_post(struct http_request_s *req, struct http_response_s *res)
+int recipe_api_post(struct mg_connection *conn, struct mg_http_message *hm)
 {
 	recipe_id id;
 	struct Recipe *recipe;
-	struct http_string_s body;
-	char *json;
-	char tbuf[BUFLARGE];
+	char *body;
 
-	body = http_request_body(req);
+	body = strndup(hm->body.ptr, hm->body.len);
 
-	json = strndup(body.buf, body.len);
-	if (json == NULL) {
-		// return http error
-		return -1;
-	}
+	recipe = recipe_from_json(body);
 
-	recipe = recipe_from_json(json);
-
-	free(json);
+	free(body);
 
 	if (recipe == NULL) {
 		ERR("couldn't parse recipe from json!\n");
@@ -217,14 +99,7 @@ int recipe_api_post(struct http_request_s *req, struct http_response_s *res)
 		return -1;
 	}
 
-	snprintf(tbuf, sizeof tbuf, "{\"id\":%lld}", id);
-
-	// fill out response information
-	http_response_status(res, 200);
-
-	http_response_body(res, tbuf, strlen(tbuf));
-
-	http_respond(req, res);
+	mg_http_reply(conn, 200, NULL, "{\"id\":%lld}", id);
 
 	recipe_free(recipe);
 
@@ -232,28 +107,22 @@ int recipe_api_post(struct http_request_s *req, struct http_response_s *res)
 }
 
 // recipe_api_put : endpoint, PUT - /api/v1/recipe/{id}
-int recipe_api_put(struct http_request_s *req, struct http_response_s *res)
+int recipe_api_put(struct mg_connection *conn, struct mg_http_message *hm)
 {
 	recipe_id id;
 	s64 rc;
 	struct Recipe *recipe;
-	struct http_string_s body;
-	struct http_string_s uri;
 	char *url;
 	char *json;
-	char tbuf[BUFLARGE];
 
-	uri = http_request_target(req);
-	url = strndup(uri.buf, strchr(uri.buf, ' ') - uri.buf);
+	url = strndup(hm->uri.ptr, hm->uri.len);
 
     rc = sscanf(url, "/api/v1/recipe/%lld", &id);
     assert(rc == 1);
 
 	free(url);
 
-	body = http_request_body(req);
-
-	json = strndup(body.buf, body.len);
+	json = strndup(hm->body.ptr, hm->body.len);
 	if (json == NULL) { // TODO (Brian): HTTP Error
 		return -1;
 	}
@@ -284,13 +153,7 @@ int recipe_api_put(struct http_request_s *req, struct http_response_s *res)
 		return -1;
 	}
 
-	snprintf(tbuf, sizeof tbuf, "{\"id\":%lld}", id);
-
-	http_response_status(res, 200);
-
-	http_response_body(res, tbuf, strlen(tbuf));
-
-	http_respond(req, res);
+	mg_http_reply(conn, 200, NULL, "{\"id\":%lld}", id);
 
 	recipe_free(recipe);
 
@@ -298,17 +161,15 @@ int recipe_api_put(struct http_request_s *req, struct http_response_s *res)
 }
 
 // recipe_api_get : endpoint, GET - /api/v1/recipe/{id}
-int recipe_api_get(struct http_request_s *req, struct http_response_s *res)
+int recipe_api_get(struct mg_connection *conn, struct mg_http_message *hm)
 {
 	recipe_id id;
 	struct Recipe *recipe;
-	struct http_string_s uri;
 	char *url;
 	char *json;
     int rc;
 
-	uri = http_request_target(req);
-	url = strndup(uri.buf, strchr(uri.buf, ' ') - uri.buf);
+	url = strndup(hm->uri.ptr, hm->uri.len);
 
     rc = sscanf(url, "/api/v1/recipe/%lld", &id);
     assert(rc == 1);
@@ -327,14 +188,7 @@ int recipe_api_get(struct http_request_s *req, struct http_response_s *res)
 		return -1;
 	}
 
-	recipe_free(recipe);
-
-	// fill out response information
-	http_response_status(res, 200);
-
-	http_response_body(res, json, strlen(json));
-
-	http_respond(req, res);
+	mg_http_reply(conn, 200, NULL, "%s", json);
 
 	free(json);
 
@@ -342,13 +196,12 @@ int recipe_api_get(struct http_request_s *req, struct http_response_s *res)
 }
 
 // recipe_api_getlist : endpoint, GET - /api/v1/recipe/list
-int recipe_api_getlist(struct http_request_s *req, struct http_response_s *res)
+int recipe_api_getlist(struct mg_connection *conn, struct mg_http_message *hm)
 {
 	struct SearchQuery query;
-	struct kvpairs *pairs;
-	struct http_string_s http_uri;
-	char *uri;
 	char *json;
+	char *qstr;
+	char *s, *k, *v;
 
 	memset(&query, 0, sizeof query);
 
@@ -356,46 +209,25 @@ int recipe_api_getlist(struct http_request_s *req, struct http_response_s *res)
 	query.page_number = 0;
 	query.text = NULL;
 
-	http_uri = http_request_target(req);
-	uri = strndup(http_uri.buf, http_uri.len);
+	qstr = strndup(hm->query.ptr, hm->query.len);
 
-	pairs = http_parse_query_parameters(uri);
+	for (s = strtok(qstr, "&"); s; s = strtok(NULL, "&")) {
+		k = s;
+		v = strchr(k, '=');
 
-	free(uri);
+		if (v == NULL)
+			continue;
 
-	if (pairs == NULL) {
-		ERR("couldn't parse the http query parameter pairs!");
-		free(uri);
-		return -1;
-	}
+		*v++ = 0;
 
-	{
-		char *page_size;
-
-		page_size = kvpairs_get(pairs, "siz");
-		if (page_size != NULL) {
-			query.page_size = atol(page_size);
-		}
-	}
-
-	{
-		char *page_number;
-
-		page_number = kvpairs_get(pairs, "num");
-		if (page_number != NULL) {
-			query.page_number = atol(page_number);
-		}
-	}
-
-	// TODO (Brian): We probably have to decode % encoded values into their real values
-	// We'll handle that before we ship, probably.
-
-	{
-		char *text;
-
-		text = kvpairs_get(pairs, "q");
-		if (text != NULL) {
-			query.text = text;
+		if (streq(k, "siz")) {
+			query.page_size = atol(v);
+		} else if (streq(k, "num")) {
+			query.page_number = atol(v);
+		} else if (streq(k, "q")) {
+			query.text = v; // WARN (Brian): will this be okay if we defer freeing 'qstr'?
+		} else {
+			// TODO (Brian): handle bad parameters here
 		}
 	}
 
@@ -407,29 +239,22 @@ int recipe_api_getlist(struct http_request_s *req, struct http_response_s *res)
 
 	search_results_free(results);
 
-	http_response_status(res, 200);
+	mg_http_reply(conn, 200, NULL, "%s", json);
 
-	http_response_body(res, json, strlen(json));
-
-	http_respond(req, res);
-
+	free(qstr);
 	free(json);
-
-	kvpairs_free(pairs);
 
 	return 0;
 }
 
 // recipe_api_delete : endpoint, DELETE - /api/v1/recipe/{id}
-int recipe_api_delete(struct http_request_s *req, struct http_response_s *res)
+int recipe_api_delete(struct mg_connection *conn, struct mg_http_message *hm)
 {
     recipe_id id;
-    struct http_string_s uri;
     char *url;
     int rc;
 
-    uri = http_request_target(req);
-    url = strndup(uri.buf, strchr(uri.buf, ' ') - uri.buf);
+    url = strndup(hm->uri.ptr, hm->uri.len);
 
     rc = sscanf(url, "/api/v1/recipe/%lld", &id);
     assert(rc == 1);
@@ -443,8 +268,7 @@ int recipe_api_delete(struct http_request_s *req, struct http_response_s *res)
         return -1;
     }
 
-    http_response_status(res, 200);
-    http_respond(req, res);
+	mg_http_reply(conn, 200, NULL, NULL);
 
 	return 0;
 }

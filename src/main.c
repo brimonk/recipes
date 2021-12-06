@@ -294,7 +294,7 @@ int send_file_styles(struct mg_connection *conn, struct mg_http_message *hm)
 		.mime_types = "text/css"
 	};
 
-	mg_http_serve_file(conn, hm, "html/styles.css", &opts);
+	mg_http_serve_file(conn, hm, "src/styles.css", &opts);
 
 	return 0;
 }
