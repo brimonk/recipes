@@ -49,7 +49,6 @@
 
 #include "objects.h"
 #include "ht.h"
-#include "migrations.h"
 
 #include "recipe.h"
 #include "tag.h"
@@ -125,12 +124,6 @@ int main(int argc, char **argv)
 	}
 
 	init(argv[1]);
-
-	rc = migrations_exec();
-	if (rc < 0) {
-		ERR("couldn't apply migrations, quitting!\n");
-		exit(1);
-	}
 
 	store_write();
 
