@@ -138,7 +138,11 @@ int main(int argc, char **argv)
 
 	mg_mgr_init(&mgr);
 
-	mg_http_listen(&mgr, "0.0.0.0:2000", event_handler, NULL);
+	char url[BUFSMALL];
+
+	snprintf(url, sizeof url, "http://0.0.0.0:%d", PORT);
+
+	mg_http_listen(&mgr, url, event_handler, NULL);
 
 	printf("listening on http://localhost:%d\n", PORT);
 
