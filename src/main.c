@@ -47,6 +47,9 @@
 #include <sodium.h>
 #include <jansson.h>
 
+#define MG_ENABLE_LOG 0
+#include "mongoose.h"
+
 #include "objects.h"
 #include "ht.h"
 
@@ -63,25 +66,26 @@ static magic_t MAGIC_COOKIE;
 // init: initializes the program
 void init(char *fname);
 
+// event_handler : handles mongoose (web) events
+void event_handler(struct mg_connection *conn, int ev, void *ev_data, void *fn_data);
+
 // request_handler: the http request handler
-void request_handler(struct http_request_s *req);
+void request_handler(struct mg_connection *conn, struct mg_http_message *hm);
 
 // rcheck: returns true if the route in req matches the path and method
 int rcheck(struct http_request_s *req, char *target, char *method);
 
 // send_file_static : sends the static data JSON blob
-int send_file_static(struct http_request_s *req, struct http_response_s *res);
+int send_file_static(struct mg_connection *conn, struct mg_http_message *hm);
 // send_file_uijs : sends the javascript for the ui to the user
-int send_file_uijs(struct http_request_s *req, struct http_response_s *res);
+int send_file_uijs(struct mg_connection *conn, struct mg_http_message *hm);
 // send_file_styles : sends the styles file to the user
-int send_file_styles(struct http_request_s *req, struct http_response_s *res);
+int send_file_styles(struct mg_connection *conn, struct mg_http_message *hm);
 // send_file_index : sends the index file to the user
-int send_file_index(struct http_request_s *req, struct http_response_s *res);
-// send_file_path : sends a file to the user at path 'path'
-int send_file_path(struct http_request_s *req, struct http_response_s *res, char *path);
+int send_file_index(struct mg_connection *conn, struct mg_http_message *hm);
 
 // send_error: sends an error
-int send_error(struct http_request_s *req, struct http_response_s *res, int errcode);
+int send_error(struct mg_connection *conn, int errcode);
 
 // get_list: returns the list page for a given table
 int get_list(struct http_request_s *req, struct http_response_s *res, char *table);
@@ -97,25 +101,19 @@ extern handle_t handle;
 #define USAGE ("USAGE: %s <dbname>\n")
 #define SCHEMA ("src/schema.sql")
 
+int running;
+
 struct ht *routes;
-struct http_server_s *server;
 
 // handle_sigint: handles SIGINT so we can write to the database
 void handle_sigint(int sig)
 {
-	store_write();
-	store_free();
-
-	http_server_free(server);
-
-	ht_destroy(routes);
-
-	printf("\n");
-	exit(1);
+	running = false;
 }
 
 int main(int argc, char **argv)
 {
+	struct mg_mgr mgr;
 	int rc;
 
 	if (argc < 2) {
@@ -126,10 +124,6 @@ int main(int argc, char **argv)
 	init(argv[1]);
 
 	store_write();
-
-	server = http_server_init(PORT, request_handler);
-
-	printf("listening on http://localhost:%d\n", PORT);
 
 	signal(SIGINT, handle_sigint);
 
@@ -152,21 +146,55 @@ int main(int argc, char **argv)
 	ht_set(routes, "GET /index.html", (void *)send_file_index);
 	ht_set(routes, "GET /", (void *)send_file_index);
 
-	http_server_listen(server);
+	mg_mgr_init(&mgr);
 
-	http_server_free(server);
+	mg_http_listen(&mgr, "0.0.0.0:2000", event_handler, NULL);
+
+	printf("listening on http://localhost:%d\n", PORT);
+
+	for (running = true; running;) {
+		mg_mgr_poll(&mgr, 1000);
+	}
+
+	mg_mgr_free(&mgr);
 
 	store_write();
+
 	ht_destroy(routes);
 
 	return 0;
 }
 
+// event_handler : handles mongoose (web) events
+void event_handler(struct mg_connection *conn, int ev, void *ev_data, void *fn_data)
+{
+	switch (ev) {
+		case MG_EV_ERROR: {
+			ERR("Mongoose Error! %s\n", (char *)ev_data);
+			break;
+		}
+
+		case MG_EV_HTTP_MSG: {
+			// mg_http_serve_dir(conn, ev_data, &opts);
+			request_handler(conn, (struct mg_http_message *)ev_data);
+			break;
+		}
+
+		case MG_EV_HTTP_CHUNK: {
+			ERR("We don't know what to do here yet! Partial Message Chunk\n");
+			break;
+		}
+
+		default: {
+			break;
+		}
+	}
+}
+
 // format_target_string : format the incomming requets for the routing hashtable
-int format_target_string(char *s, struct http_request_s *req, size_t len)
+int format_target_string(char *s, struct mg_http_message *hm, size_t len)
 {
 	size_t buflen;
-	struct http_string_s target, method;
 	char *tok;
 	char *hasq;
 	char copy[BUFLARGE];
@@ -177,15 +205,13 @@ int format_target_string(char *s, struct http_request_s *req, size_t len)
 	// - make sure we uppercase (normalize, really) all of the data from the user. HTTP blows.
 	// - ensure 'len' isn't larger than BUFLARGE
 
+	assert(s != NULL);
+	assert(hm != NULL);
+
 	memset(copy, 0, sizeof copy);
 	memset(readfrom, 0, sizeof readfrom);
 
-	assert(s != NULL);
-
-	method = http_request_method(req);
-	target = http_request_target(req);
-
-	strncpy(readfrom, target.buf, MIN(sizeof(readfrom), target.len));
+	strncpy(readfrom, hm->uri.ptr, MIN(sizeof(readfrom), hm->uri.len));
 
 	buflen = 0;
 
@@ -206,122 +232,90 @@ int format_target_string(char *s, struct http_request_s *req, size_t len)
 		copy[0] = '/';
 	}
 
-	snprintf(s, len, "%.*s %s", method.len, method.buf, copy);
+	snprintf(s, len, "%.*s %s", (int)hm->method.len, hm->method.ptr, copy);
 
 	return 0;
 }
 
 // request_handler: the http request handler
-void request_handler(struct http_request_s *req)
+void request_handler(struct mg_connection *conn, struct mg_http_message *hm)
 {
-	struct http_response_s *res;
 	int rc;
-	int (*func)(struct http_request_s *, struct http_response_s *);
+	int (*func) (struct mg_connection *conn, struct mg_http_message *hm);
 	char buf[BUFLARGE];
 
-#define SNDERR(E) send_error(req, res, (E))
-#define CHKERR(E) do { if ((rc) < 0) { send_error(req, res, (E)); } } while (0)
+#define SNDERR(E) send_error(conn, (E))
+#define CHKERR(E) do { if ((rc) < 0) { send_error(conn, (E)); } } while (0)
 
 	memset(buf, 0, sizeof buf);
 
-	rc = format_target_string(buf, req, sizeof buf);
+	rc = format_target_string(buf, hm, sizeof buf);
 
 	printf("%s\n", buf);
-
-	res = http_response_init();
 
 	func = ht_get(routes, buf);
 
 	if (func == NULL) {
         SNDERR(404);
 	} else {
-		rc = func(req, res);
+		rc = func(conn, hm);
 		CHKERR(503);
 	}
 }
 
 // send_file_static : sends the static data JSON blob
-int send_file_static(struct http_request_s *req, struct http_response_s *res)
+int send_file_static(struct mg_connection *conn, struct mg_http_message *hm)
 {
-	return send_file_path(req, res, "src/static.json");
+	struct mg_http_serve_opts opts = {
+		.mime_types = "application/json"
+	};
+
+	mg_http_serve_file(conn, hm, "src/static.json", &opts);
+
+	return 0;
 }
 
 // send_file_uijs : sends the javascript for the ui to the user
-int send_file_uijs(struct http_request_s *req, struct http_response_s *res)
+int send_file_uijs(struct mg_connection *conn, struct mg_http_message *hm)
 {
-	return send_file_path(req, res, "html/ui.js");
+	struct mg_http_serve_opts opts = {
+		.mime_types = "application/json"
+	};
+
+	mg_http_serve_file(conn, hm, "src/ui.js", &opts);
+
+	return 0;
 }
 
 // send_file_styles : sends the styles file to the user
-int send_file_styles(struct http_request_s *req, struct http_response_s *res)
+int send_file_styles(struct mg_connection *conn, struct mg_http_message *hm)
 {
-	char *file_data;
-	char *path;
-	size_t len;
+	struct mg_http_serve_opts opts = {
+		.mime_types = "text/css"
+	};
 
-    // NOTE (Brian) there's a small issue with libmagic setting the mime type for css correctly, so
-    // I'm basically doing this myself. Without this, the server just sends "text/plain" as the
-    // type, and the browser doesn't like that.
-
-	path = "html/styles.css";
-
-	if (access(path, F_OK) == 0) {
-		file_data = sys_readfile(path, &len);
-
-		http_response_status(res, 200);
-		http_response_header(res, "Content-Type", "text/css");
-		http_response_body(res, file_data, len);
-
-		http_respond(req, res);
-
-		free(file_data);
-	} else {
-		send_error(req, res, 404);
-	}
+	mg_http_serve_file(conn, hm, "html/styles.css", &opts);
 
 	return 0;
 }
 
 // send_file_index : sends the index file to the user
-int send_file_index(struct http_request_s *req, struct http_response_s *res)
+int send_file_index(struct mg_connection *conn, struct mg_http_message *hm)
 {
-	return send_file_path(req, res, "html/index.html");
-}
+	struct mg_http_serve_opts opts = {
+		.mime_types = "text/css"
+	};
 
-// send_file_path : sends a file to the user at path 'path'
-int send_file_path(struct http_request_s *req, struct http_response_s *res, char *path)
-{
-	char *file_data;
-	char *mime_type;
-	size_t len;
-
-	// NOTE (Brian): To make this routing fit well in a hashtable (hopefully, to make routing
-	// easier), this function distributes the two static files that we give a shit about.
-
-	if (access(path, F_OK) == 0) {
-		file_data = sys_readfile(path, &len);
-
-		mime_type = (char *)magic_buffer(MAGIC_COOKIE, file_data, len);
-
-		http_response_status(res, 200);
-		http_response_header(res, "Content-Type", mime_type);
-		http_response_body(res, file_data, len);
-
-		http_respond(req, res);
-
-		free(file_data);
-	} else {
-		send_error(req, res, 404);
-	}
+	mg_http_serve_file(conn, hm, "src/index.html", &opts);
 
 	return 0;
+
 }
 
 // send_error: sends an error
-int send_error(struct http_request_s *req, struct http_response_s *res, int errcode)
+int send_error(struct mg_connection *conn, int errcode)
 {
-	http_response_status(res, errcode);
-	http_respond(req, res);
+	mg_http_reply(conn, errcode, NULL, NULL);
 
 	return 0;
 }

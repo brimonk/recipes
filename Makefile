@@ -9,7 +9,7 @@ DEP=$(SRC:.c=.d)
 
 JS=$(wildcard src/*.js)
 
-all: $(TARGET) html/ui.js
+all: $(TARGET)
 
 watch: all
 	while [ true ] ; do \
@@ -33,9 +33,6 @@ run: all
 
 $(TARGET): $(OBJ)
 	$(CC) -fsanitize=address $(CFLAGS) -o $@ $^ -static-libasan $(LINKER)
-
-html/ui.js: $(JS)
-	cat $(JS) > $@
 
 clean:
 	rm -f $(OBJ)
