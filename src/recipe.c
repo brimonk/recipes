@@ -498,8 +498,12 @@ s64 recipe_delete(s64 id)
 int search_matches(recipe_id id, char *text)
 {
 	recipe_t *recipe;
-	string_128_t *name;
+	string_128_t *name, *tagtext;
 	int rc;
+	size_t i;
+
+	// WARN (Brian): BUFLARGE needs to be larger than any one string (it is as of writing)
+	char buf[BUFLARGE];
 
 	if (text == NULL) {
 		text = "";
@@ -522,14 +526,32 @@ int search_matches(recipe_id id, char *text)
 	// NOTE (Brian): GNU doesn't have a strnstr function, so at some point we should probably
 	// write our own.
 
-	char *s;
+	memset(buf, 0, sizeof buf);
+	memcpy(buf, name->string, sizeof(name->string));
 
-	s = strndup(name->string, sizeof(name->string));
+	rc = strcasestr(buf, text) != NULL;
 
-	// rc = strstr(s, text) != NULL;
-	rc = strcasestr(s, text) != NULL;
+	if (rc) {
+		return rc;
+	}
 
-	free(s);
+	for (i = 0; i < store_getlen(RT_TAG); i++) {
+		tag_t *tag = store_getobj(RT_TAG, i);
+		if (tag == NULL || tag->recipe_id != id) {
+			continue;
+		}
+
+		tagtext = store_getobj(RT_STRING128, tag->string_id);
+
+		memset(buf, 0, sizeof buf);
+		memcpy(buf, tagtext->string, sizeof(tagtext->string));
+
+		rc = strcasestr(buf, text) != NULL;
+
+		if (rc) {
+			return rc;
+		}
+	}
 
 	return rc;
 }
@@ -608,17 +630,17 @@ struct RecipeResultRecords *recipe_search(struct SearchQuery *search)
                 }
 
                 prep_time = store_getobj(RT_STRING128, recipe->prep_time_id);
-                if (name == NULL) { // HOW THE FUCK
+                if (prep_time == NULL) { // HOW THE FUCK
                     break;
                 }
 
                 cook_time = store_getobj(RT_STRING128, recipe->cook_time_id);
-                if (name == NULL) { // HOW THE FUCK
+                if (cook_time == NULL) { // HOW THE FUCK
                     break;
                 }
 
                 servings = store_getobj(RT_STRING128, recipe->servings_id);
-                if (name == NULL) { // HOW THE FUCK
+                if (servings == NULL) { // HOW THE FUCK
                     break;
                 }
 
