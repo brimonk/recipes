@@ -23,6 +23,7 @@
 // Not Required:
 //   note
 
+#define _GNU_SOURCE
 #include "common.h"
 
 #include <sodium.h>
@@ -525,7 +526,8 @@ int search_matches(recipe_id id, char *text)
 
 	s = strndup(name->string, sizeof(name->string));
 
-	rc = strstr(s, text) != NULL;
+	// rc = strstr(s, text) != NULL;
+	rc = strcasestr(s, text) != NULL;
 
 	free(s);
 
