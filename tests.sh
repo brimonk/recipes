@@ -79,12 +79,18 @@ function actual
 function generate
 {
 	FNAME="$(expected $1)"
+	JQSTR=""
+
 	echo ${TEMPLATE//Z/$1} > $FNAME
 
 	for ((j=0;j<$Y;j++)); do
-		jq -c '.ingredients += ["VALUE"] | .steps += ["VALUE"] | .tags += ["VALUE"]' \
-			$FNAME | sponge $FNAME
+		JQSTR="$JQSTR"'.ingredients += ["VALUE"] | .steps += ["VALUE"] | .tags += ["VALUE"]'
+		if [[ $j -lt $(($Y - 1)) ]]; then
+			JQSTR="$JQSTR"' | '
+		fi
 	done
+
+	jq -c "$JQSTR" $FNAME | sponge $FNAME
 }
 
 # post: posts the recipe for index $1
@@ -146,23 +152,6 @@ done
 
 # GET all of the recipes, and compare
 for ((i=1;i<=$X;i++)); do
-	GENFILE="recipe.$i.json"
-	VERFILE="recipe.verify.$i.json"
-
-	get $i > $VERFILE ; remove_id $VERFILE
-
-	CMP=$(diff $GENFILE $VERFILE | wc -c)
-
-	if [ $CMP -gt 0 ]; then
-		echo "Recipe $i does not match what we initially sent!, $CMP bytes different"
-		cat "$DATADIR/$GENFILE"
-		cat "$DATADIR/$VERFILE"
-		exit 1
-	fi
-done
-
-# update the "pre-made values" (make the json blobs lower-case)
-for ((i=1;i<$X;i++)); do
 	log get round 1 $i
 	get $i > $(actual $i); remove_id $(actual $i)
 	verify $i $(expected $i) $(actual $i)
