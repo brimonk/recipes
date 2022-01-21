@@ -34,9 +34,18 @@
 X=10
 Y=10
 
+[ $# -gt 0 ] && X=$1 && shift
+[ $# -gt 0 ] && Y=$1 && shift
+
+echo $X $Y
+
 DATADIR=$(mktemp -d -t ci-XXXXXXXXXX)
+DBNAME="test.db"
 
 TEMPLATE='{"cook_time":"COOK TIME Z","ingredients":[],"name":"NAME Z","note":"Z","prep_time":"PREP TIME Z","servings":"Z","steps":[],"tags":[]}'
+
+./recipe $DBNAME > /dev/null &
+PID=$!
 
 pushd $DATADIR
 
@@ -73,7 +82,7 @@ function remove_id
 # put: puts the recipe for index $i
 function put
 {
-	curl -X PUT http://localhost:2000/api/v1/recipe/$1 -d @recipe.$1.json > /dev/null
+	curl -s -X PUT http://localhost:2000/api/v1/recipe/$1 -d @recipe.$1.json > /dev/null
 }
 
 # delete: deletes the recipe for index $i
@@ -111,7 +120,6 @@ done
 for ((i=1;i<$X;i++)); do
 	cat "recipe.$i.json" | tr 'A-Z' 'a-z' | sponge "recipe.$i.json"
 	jq -c --arg id $i '. + {id: $id}' "recipe.$i.json" | sponge "recipe.$i.json"
-	cat "recipe.$i.json"
 done
 
 # PUT all of the recipes
@@ -119,7 +127,7 @@ for ((i=1;i<=$X;i++)); do
 	put $i
 done
 
-# TODO (Brian): still need to compare
+# TODO (Brian): still need to compare the updates
 
 # DELETE all of the recipes
 for ((i=1;i<=$X;i++)); do
@@ -128,5 +136,8 @@ done
 
 popd
 
+kill $PID
+
 rm -rf DATADIR
+rm $DBNAME
 
