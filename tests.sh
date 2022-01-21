@@ -37,15 +37,45 @@ Y=10
 [ $# -gt 0 ] && X=$1 && shift
 [ $# -gt 0 ] && Y=$1 && shift
 
+set -e
+
 DATADIR=$(mktemp -d -t ci-XXXXXXXXXX)
-DBNAME="test.db"
 
 TEMPLATE='{"cook_time":"COOK TIME Z","ingredients":[],"name":"NAME Z","note":"Z","prep_time":"PREP TIME Z","servings":"Z","steps":[],"tags":[]}'
 
-./recipe $DATADIR/$DBNAME > /dev/null &
+./recipe "$DATADIR/test.db" &
 PID=$!
 
+cleanup()
+{
+	# pop off the whole dir stack until we get to where we started
+	while [[ $(dirs -v | wc -l) -gt 1 ]]; do
+		popd
+	done
+
+	# kill the server if it's still alive
+	if [ -e /proc/$PID/status ]; then
+		kill $PID
+	fi
+
+	rm -rf $DATADIR
+}
+
+trap cleanup SIGINT
+trap cleanup SIGQUIT
+trap cleanup ERR
+
 pushd $DATADIR
+
+function now
+{
+	echo $(date '+%Y%m%d-%H%M%S')
+}
+
+function log
+{
+	echo $(now) "LOG" $@
+}
 
 function expected
 {
@@ -61,12 +91,18 @@ function actual
 function generate
 {
 	FNAME="$(expected $1)"
+	JQSTR=""
+
 	echo ${TEMPLATE//Z/$1} > $FNAME
 
 	for ((j=0;j<$Y;j++)); do
-		jq -c '.ingredients += ["VALUE"] | .steps += ["VALUE"] | .tags += ["VALUE"]' \
-			$FNAME | sponge $FNAME
+		JQSTR="$JQSTR"'.ingredients += ["VALUE"] | .steps += ["VALUE"] | .tags += ["VALUE"]'
+		if [[ $j -lt $(($Y - 1)) ]]; then
+			JQSTR="$JQSTR"' | '
+		fi
 	done
+
+	jq -c "$JQSTR" $FNAME | sponge $FNAME
 }
 
 # post: posts the recipe for index $1
@@ -117,21 +153,25 @@ function verify
 }
 
 for ((i=1;i<=$X;i++)); do
+	log generate $i
 	generate $i
 done
 
 for ((i=1;i<=$X;i++)); do
+	log post $i
 	post $(expected $i)
 done
 
 # GET all of the recipes, and compare
 for ((i=1;i<=$X;i++)); do
+	log get round 1 $i
 	get $i > $(actual $i); remove_id $(actual $i)
 	verify $i $(expected $i) $(actual $i)
 done
 
 # update the "pre-made values" (make the json blobs lower-case)
 for ((i=1;i<=$X;i++)); do
+	log update $i
 	# make everything lowercase, and add in the expected 'id'
 	cat $(expected $i) | tr 'A-Z' 'a-z' | sponge $(expected $i)
 	jq -S -c --argjson id $i '. + {id: $id}' $(expected $i) | sponge $(expected $i)
@@ -139,23 +179,24 @@ done
 
 # PUT all of the recipes
 for ((i=1;i<=$X;i++)); do
+	log put $i
 	put $i $(expected $i)
 done
 
 # GET all of the recipes, and compare (again)
 for ((i=1;i<=$X;i++)); do
+	log get round 2 $i
 	get $i > $(actual $i)
 	verify $i $(expected $i) $(actual $i)
 done
 
 # DELETE all of the recipes
 for ((i=1;i<=$X;i++)); do
+	log delete $i
 	delete $i
 done
 
 popd
 
-kill $PID
-
-rm -rf DATADIR
+cleanup
 
