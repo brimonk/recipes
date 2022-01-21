@@ -103,7 +103,6 @@ int recipe_api_post(struct mg_connection *conn, struct mg_http_message *hm)
 	mg_http_reply(conn, 200, NULL, "{\"id\":%lld}", id);
 
 	recipe_free(recipe);
-	free(body);
 
 	return 0;
 }
@@ -119,8 +118,8 @@ int recipe_api_put(struct mg_connection *conn, struct mg_http_message *hm)
 
 	url = strndup(hm->uri.ptr, hm->uri.len);
 
-    rc = sscanf(url, "/api/v1/recipe/%lld", &id);
-    assert(rc == 1);
+	rc = sscanf(url, "/api/v1/recipe/%lld", &id);
+	assert(rc == 1);
 
 	free(url);
 
@@ -169,12 +168,12 @@ int recipe_api_get(struct mg_connection *conn, struct mg_http_message *hm)
 	struct Recipe *recipe;
 	char *url;
 	char *json;
-    int rc;
+	int rc;
 
 	url = strndup(hm->uri.ptr, hm->uri.len);
 
-    rc = sscanf(url, "/api/v1/recipe/%lld", &id);
-    assert(rc == 1);
+	rc = sscanf(url, "/api/v1/recipe/%lld", &id);
+	assert(rc == 1);
 
 	free(url);
 
@@ -254,25 +253,25 @@ int recipe_api_getlist(struct mg_connection *conn, struct mg_http_message *hm)
 // recipe_api_delete : endpoint, DELETE - /api/v1/recipe/{id}
 int recipe_api_delete(struct mg_connection *conn, struct mg_http_message *hm)
 {
-    recipe_id id;
-    char *url;
-    int rc;
+	recipe_id id;
+	char *url;
+	int rc;
 
-    url = strndup(hm->uri.ptr, hm->uri.len);
+	url = strndup(hm->uri.ptr, hm->uri.len);
 
-    rc = sscanf(url, "/api/v1/recipe/%lld", &id);
-    assert(rc == 1);
+	rc = sscanf(url, "/api/v1/recipe/%lld", &id);
+	assert(rc == 1);
 
-    free(url);
+	free(url);
 
-    rc = recipe_delete(id);
-    if (rc < 0) {
-        // TODO (Brian): return HTTP error
-        ERR("couldn't delete the recipe from the database!\n");
-        return -1;
-    }
+	rc = recipe_delete(id);
+	if (rc < 0) {
+		// TODO (Brian): return HTTP error
+		ERR("couldn't delete the recipe from the database!\n");
+		return -1;
+	}
 
-	mg_http_reply(conn, 200, NULL, NULL);
+	mg_http_reply(conn, 200, "", "");
 
 	return 0;
 }
@@ -301,17 +300,17 @@ s64 recipe_add(struct Recipe *recipe)
 	strncpy(string128->string, recipe->name, sizeof(string128->string));
 	record->name_id = string128->base.id;
 
-    string128 = store_addobj(RT_STRING128);
-    strncpy(string128->string, recipe->prep_time, sizeof(string128->string));
-    record->prep_time_id = string128->base.id;
+	string128 = store_addobj(RT_STRING128);
+	strncpy(string128->string, recipe->prep_time, sizeof(string128->string));
+	record->prep_time_id = string128->base.id;
 
-    string128 = store_addobj(RT_STRING128);
-    strncpy(string128->string, recipe->cook_time, sizeof(string128->string));
-    record->cook_time_id = string128->base.id;
+	string128 = store_addobj(RT_STRING128);
+	strncpy(string128->string, recipe->cook_time, sizeof(string128->string));
+	record->cook_time_id = string128->base.id;
 
-    string128 = store_addobj(RT_STRING128);
-    strncpy(string128->string, recipe->servings, sizeof(string128->string));
-    record->servings_id = string128->base.id;
+	string128 = store_addobj(RT_STRING128);
+	strncpy(string128->string, recipe->servings, sizeof(string128->string));
+	record->servings_id = string128->base.id;
 
 	if (recipe->note != NULL) {
 		string256 = store_addobj(RT_STRING256);
@@ -374,9 +373,9 @@ struct Recipe *recipe_get(s64 id)
 	size_t i, len;
 
 	record = store_getobj(RT_RECIPE, id);
-    if (record == NULL) {
-        return NULL;
-    }
+	if (record == NULL) {
+		return NULL;
+	}
 
 	recipe = calloc(1, sizeof(*recipe));
 	if (recipe == NULL) {
@@ -388,13 +387,13 @@ struct Recipe *recipe_get(s64 id)
 	string128 = store_getobj(RT_STRING128, record->name_id);
 	recipe->name = strndup(string128->string, sizeof(string128->string));
 
-    string128 = store_getobj(RT_STRING128, record->prep_time_id);
+	string128 = store_getobj(RT_STRING128, record->prep_time_id);
 	recipe->prep_time = strndup(string128->string, sizeof(string128->string));
 
-    string128 = store_getobj(RT_STRING128, record->cook_time_id);
+	string128 = store_getobj(RT_STRING128, record->cook_time_id);
 	recipe->cook_time = strndup(string128->string, sizeof(string128->string));
 
-    string128 = store_getobj(RT_STRING128, record->servings_id);
+	string128 = store_getobj(RT_STRING128, record->servings_id);
 	recipe->servings = strndup(string128->string, sizeof(string128->string));
 
 	string256 = store_getobj(RT_STRING256, record->note_id);
@@ -402,7 +401,7 @@ struct Recipe *recipe_get(s64 id)
 		recipe->note = strndup(string256->string, sizeof(string256->string));
 	}
 
-    // NOTE (Brian): the wrapping NULL checks make sure the item is actually in use
+	// NOTE (Brian): the wrapping NULL checks make sure the item is actually in use
 
 	// aggregate all of the ingredients
 	for (i = 1, len = store_getlen(RT_INGREDIENT); i <= len; i++) {
@@ -587,74 +586,74 @@ struct RecipeResultRecords *recipe_search(struct SearchQuery *search)
 	//
 	// For performance speedups, we'll need to compute / store an index to walk instead. For the
 	// moment, we sure do just check every single record. This really doesn't scale too well.
-    //
-    // It's also the case that at some point, we really want something that looks like bsearch, or
-    // similar to find items from the hunks. We'd probably want something like this:
-    //
-    //     store_find(int type, s64 id, int (*func)(void *), void *param);
-    //
-    // Where the search criteria can be passed as the void *param. As of now, none of these things
-    // are sorted in any way. It could be useful to basically create indexes for every column, so
-    // you could maybe have something like this:
-    //
-    //     store_find_idx(int type, s64 id, int (*func)(void *), void *param, int idx);
-    //
-    // And that function could work just like bsearch, with possible search comparator functions for
-    // the individual record types. That being said, I don't know how you'd do anything about the
-    // integer indexes. We'd probably just have to assign the next highest int, and perform our
-    // searches just like a database at that point.
-    //
-    // Basically, I haven't found any super satisfying ways to do this searching.
+	//
+	// It's also the case that at some point, we really want something that looks like bsearch, or
+	// similar to find items from the hunks. We'd probably want something like this:
+	//
+	//     store_find(int type, s64 id, int (*func)(void *), void *param);
+	//
+	// Where the search criteria can be passed as the void *param. As of now, none of these things
+	// are sorted in any way. It could be useful to basically create indexes for every column, so
+	// you could maybe have something like this:
+	//
+	//     store_find_idx(int type, s64 id, int (*func)(void *), void *param, int idx);
+	//
+	// And that function could work just like bsearch, with possible search comparator functions for
+	// the individual record types. That being said, I don't know how you'd do anything about the
+	// integer indexes. We'd probably just have to assign the next highest int, and perform our
+	// searches just like a database at that point.
+	//
+	// Basically, I haven't found any super satisfying ways to do this searching.
 
 	// NOTE (Brian): Now we get to do our dynamic allocation, to pull back page_size records.
 	records->records_cap = page_size;
 	records->records = calloc(records->records_cap, sizeof(*records->records));
 
-    for (i = 1, len = store_getlen(RT_RECIPE); i <= len; i++) {
-        if (store_isused(RT_RECIPE, i) && search_matches((recipe_id)i, search->text)) {
-            records->matches++;
+	for (i = 1, len = store_getlen(RT_RECIPE); i <= len; i++) {
+		if (store_isused(RT_RECIPE, i) && search_matches((recipe_id)i, search->text)) {
+			records->matches++;
 
-            if (skip) {
-                // we have to skip some records because we aren't on the first page
-                skip--;
-            } else if (records->records_len < records->records_cap) {
-                // we can pull back this record
-                struct RecipeResultRecord *result;
+			if (skip) {
+				// we have to skip some records because we aren't on the first page
+				skip--;
+			} else if (records->records_len < records->records_cap) {
+				// we can pull back this record
+				struct RecipeResultRecord *result;
 
-                // NOTE (Brian): these are pointer fetches, so they should always be pretty quick...
-                recipe = store_getobj(RT_RECIPE, i);
+				// NOTE (Brian): these are pointer fetches, so they should always be pretty quick...
+				recipe = store_getobj(RT_RECIPE, i);
 
-                name = store_getobj(RT_STRING128, recipe->name_id);
-                if (name == NULL) { // HOW THE FUCK
-                    break;
-                }
+				name = store_getobj(RT_STRING128, recipe->name_id);
+				if (name == NULL) { // HOW THE FUCK
+					break;
+				}
 
-                prep_time = store_getobj(RT_STRING128, recipe->prep_time_id);
-                if (prep_time == NULL) { // HOW THE FUCK
-                    break;
-                }
+				prep_time = store_getobj(RT_STRING128, recipe->prep_time_id);
+				if (prep_time == NULL) { // HOW THE FUCK
+					break;
+				}
 
-                cook_time = store_getobj(RT_STRING128, recipe->cook_time_id);
-                if (cook_time == NULL) { // HOW THE FUCK
-                    break;
-                }
+				cook_time = store_getobj(RT_STRING128, recipe->cook_time_id);
+				if (cook_time == NULL) { // HOW THE FUCK
+					break;
+				}
 
-                servings = store_getobj(RT_STRING128, recipe->servings_id);
-                if (servings == NULL) { // HOW THE FUCK
-                    break;
-                }
+				servings = store_getobj(RT_STRING128, recipe->servings_id);
+				if (servings == NULL) { // HOW THE FUCK
+					break;
+				}
 
-                result = records->records + records->records_len++;
+				result = records->records + records->records_len++;
 
-                result->id = recipe->base.id;
+				result->id = recipe->base.id;
 
-                strncpy(result->name, name->string, sizeof(result->name));
-                strncpy(result->prep_time, prep_time->string, sizeof(result->prep_time));
-                strncpy(result->cook_time, cook_time->string, sizeof(result->cook_time));
-                strncpy(result->servings, servings->string, sizeof(result->servings));
-            }
-        }
-    }
+				strncpy(result->name, name->string, sizeof(result->name));
+				strncpy(result->prep_time, prep_time->string, sizeof(result->prep_time));
+				strncpy(result->cook_time, cook_time->string, sizeof(result->cook_time));
+				strncpy(result->servings, servings->string, sizeof(result->servings));
+			}
+		}
+	}
 
 	return records;
 }
@@ -883,13 +882,13 @@ static char *recipe_to_json(struct Recipe *recipe)
 		"ingredients", ingredients,
 		"steps", steps,
 		"tags", tags
-	);
+		);
 
 	if (object == NULL) {
 		fprintf(stderr, "%s %d\n", error.text, error.position);
 	}
 
-	s = json_dumps(object, 0);
+	s = json_dumps(object, JSON_SORT_KEYS | JSON_COMPACT);
 
 	json_decref(object);
 
@@ -917,12 +916,12 @@ char *search_results_to_json(struct RecipeResultRecords *records)
 		json_array_append_new(array, object);
 	}
 
-    object = json_object();
+	object = json_object();
 
-    json_object_set_new(object, "total", json_integer(records->matches));
-    json_object_set_new(object, "results", array);
+	json_object_set_new(object, "total", json_integer(records->matches));
+	json_object_set_new(object, "results", array);
 
-	s = json_dumps(object, 0);
+	s = json_dumps(object, JSON_SORT_KEYS | JSON_COMPACT);
 
 	json_decref(object);
 
