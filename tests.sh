@@ -38,14 +38,32 @@ Y=10
 [ $# -gt 0 ] && Y=$1 && shift
 
 DATADIR=$(mktemp -d -t ci-XXXXXXXXXX)
-DBNAME="test.db"
 
 TEMPLATE='{"cook_time":"COOK TIME Z","ingredients":[],"name":"NAME Z","note":"Z","prep_time":"PREP TIME Z","servings":"Z","steps":[],"tags":[]}'
 
-./recipe $DATADIR/$DBNAME > /dev/null &
+./recipe "$DATADIR/test.db" &
 PID=$!
 
+cleanup()
+{
+	popd
+	kill $PID
+	rm -rf $DATADIR
+}
+
+trap handler INT
+
 pushd $DATADIR
+
+function now
+{
+	echo $(date '+%Y%m%d-%H%M%S')
+}
+
+function log
+{
+	echo $(now) "LOG" $@
+}
 
 function expected
 {
@@ -117,21 +135,42 @@ function verify
 }
 
 for ((i=1;i<=$X;i++)); do
+	log generate $i
 	generate $i
 done
 
 for ((i=1;i<=$X;i++)); do
+	log post $i
 	post $(expected $i)
 done
 
 # GET all of the recipes, and compare
 for ((i=1;i<=$X;i++)); do
+	GENFILE="recipe.$i.json"
+	VERFILE="recipe.verify.$i.json"
+
+	get $i > $VERFILE ; remove_id $VERFILE
+
+	CMP=$(diff $GENFILE $VERFILE | wc -c)
+
+	if [ $CMP -gt 0 ]; then
+		echo "Recipe $i does not match what we initially sent!, $CMP bytes different"
+		cat "$DATADIR/$GENFILE"
+		cat "$DATADIR/$VERFILE"
+		exit 1
+	fi
+done
+
+# update the "pre-made values" (make the json blobs lower-case)
+for ((i=1;i<$X;i++)); do
+	log get round 1 $i
 	get $i > $(actual $i); remove_id $(actual $i)
 	verify $i $(expected $i) $(actual $i)
 done
 
 # update the "pre-made values" (make the json blobs lower-case)
 for ((i=1;i<=$X;i++)); do
+	log update $i
 	# make everything lowercase, and add in the expected 'id'
 	cat $(expected $i) | tr 'A-Z' 'a-z' | sponge $(expected $i)
 	jq -S -c --argjson id $i '. + {id: $id}' $(expected $i) | sponge $(expected $i)
@@ -139,23 +178,24 @@ done
 
 # PUT all of the recipes
 for ((i=1;i<=$X;i++)); do
+	log put $i
 	put $i $(expected $i)
 done
 
 # GET all of the recipes, and compare (again)
 for ((i=1;i<=$X;i++)); do
+	log get round 2 $i
 	get $i > $(actual $i)
 	verify $i $(expected $i) $(actual $i)
 done
 
 # DELETE all of the recipes
 for ((i=1;i<=$X;i++)); do
+	log delete $i
 	delete $i
 done
 
 popd
 
-kill $PID
-
-rm -rf DATADIR
+cleanup
 
