@@ -15,7 +15,7 @@
 #include "store.h"
 
 #define COOKIE_KEY ("session")
-#define COOKIE_LEN 32
+#define COOKIE_LEN (32)
 
 // newuser_verify : returns true if the new user record is valid
 int newuser_verify(struct NewUser *newuser);
@@ -29,12 +29,16 @@ int newuser_add(struct NewUser *newuser);
 // newuser_free : frees the new user 
 void newuser_free(struct NewUser *newuser);
 
+// user_set_cookie : write the header to set the user cookie in 's'
+int user_set_cookie(char *s, user_id id, size_t len);
+
 // user_api_newuser: endpoint, POST - /api/v1/newuser
 int user_api_newuser(struct mg_connection *conn, struct mg_http_message *hm)
 {
     struct NewUser *user;
     user_id id;
     char *json;
+	char cookie[BUFLARGE];
 
 	json = strndup(hm->body.ptr, hm->body.len);
 	if (json == NULL) { // return http error
@@ -64,8 +68,9 @@ int user_api_newuser(struct mg_connection *conn, struct mg_http_message *hm)
     }
 
     // TODO (Brian): set the user cookie here to whatever's in the user session
+	user_set_cookie(cookie, id, sizeof cookie);
 
-    mg_http_reply(conn, 200, NULL, "{\"id\":%lld}", id);
+    mg_http_reply(conn, 200, cookie, "{\"id\":%lld}", id);
 
     newuser_free(user);
 
@@ -82,6 +87,12 @@ int user_api_login(struct mg_connection *conn, struct mg_http_message *hm)
 int user_api_logout(struct mg_connection *conn, struct mg_http_message *hm)
 {
     return 0;
+}
+
+// user_api_whoami: endpoint, /api/v1/user/whoami
+int user_api_whoami(struct mg_connection *conn, struct mg_http_message *hm)
+{
+	return 0;
 }
 
 // newuser_verify : returns false if the newuser doesn't pass validation
@@ -195,6 +206,32 @@ int newuser_add(struct NewUser *newuser)
     user_record->session_secret = session_secret->base.id;
 
     return user_record->base.id;
+}
+
+// user_set_cookie : write the header to set the user cookie in 's'
+int user_set_cookie(char *s, user_id id, size_t len)
+{
+	user_t *user;
+	string_128_t *secret;
+	string_128_id secret_id;
+	char tbuf[BUFSMALL];
+
+	user = store_getobj(RT_USER, id);
+	if (user == NULL) {
+		return 0;
+	}
+
+	secret_id = user->session_secret;
+
+	secret = store_getobj(RT_STRING128, secret_id);
+	if (secret == NULL) {
+		return 0;
+	}
+
+	sodium_bin2base64(tbuf, sizeof tbuf, (unsigned char *)secret->string, COOKIE_LEN,
+		sodium_base64_VARIANT_URLSAFE_NO_PADDING);
+
+	return snprintf(s, len, "Set-Cookie: %s=%s; SameSite=Strict; HttpOnly\r\n", COOKIE_KEY, tbuf);
 }
 
 // newuser_from_json : converts a JSON string into a NewUser object

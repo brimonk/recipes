@@ -2,24 +2,26 @@
 // 2021-06-08 20:04:01
 //
 // TODO (Brian)
-// - New User
-// - Login
+// - API
+//   - Login
 // - Session Cookies
 // - All Strings are in a HashMap
 // - Timing Regex (Frontend / Backend)
-// - HTTP Parsing Bug (Why?) (Library doesn't handle malformed inputs?)
+//
+// - Image Upload
+//   - Recipes
+//   - User Profiles
+//
+// - User Settings Page
+//   - Password
+//   - Profile Picture
+//   - Email Change?
+//
+// - Email Verification
+//
+// - Forgot Password / Email Password Reset
 //
 // - Performance Tests
-//
-//   Full Recipe Tests:
-//     - x1000 Recipes
-//     - Create
-//     - Read (Search)
-//     - Read (Individual)
-//     - Update
-//     - Read (Search)
-//     - Read (Individual)
-//     - Delete
 //
 //   Full User Tests:
 //     - 1000 Users
@@ -127,6 +129,9 @@ int main(int argc, char **argv)
 	ht_set(routes, "DELETE /api/v1/recipe/:id", (void *)recipe_api_delete);
 
 	ht_set(routes, "POST /api/v1/newuser", (void *)user_api_newuser);
+	ht_set(routes, "POST /api/v1/login", (void *)user_api_login);
+	ht_set(routes, "POST /api/v1/logout", (void *)user_api_logout);
+	ht_set(routes, "GET /api/v1/whoami", (void *)user_api_whoami);
 
 	ht_set(routes, "GET /api/v1/tags", (void *)tag_api_getlist);
 
