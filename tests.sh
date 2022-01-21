@@ -37,14 +37,12 @@ Y=10
 [ $# -gt 0 ] && X=$1 && shift
 [ $# -gt 0 ] && Y=$1 && shift
 
-echo $X $Y
-
 DATADIR=$(mktemp -d -t ci-XXXXXXXXXX)
 DBNAME="test.db"
 
 TEMPLATE='{"cook_time":"COOK TIME Z","ingredients":[],"name":"NAME Z","note":"Z","prep_time":"PREP TIME Z","servings":"Z","steps":[],"tags":[]}'
 
-./recipe $DBNAME > /dev/null &
+./recipe $DATADIR/$DBNAME > /dev/null &
 PID=$!
 
 pushd $DATADIR
@@ -88,7 +86,7 @@ function put
 # delete: deletes the recipe for index $i
 function delete
 {
-	curl -X DELETE http://localhost:2000/api/v1/recipe/$1
+	curl -s -X DELETE http://localhost:2000/api/v1/recipe/$1
 }
 
 for ((i=1;i<=$X;i++)); do
@@ -139,5 +137,4 @@ popd
 kill $PID
 
 rm -rf DATADIR
-rm $DBNAME
 
