@@ -47,22 +47,32 @@ PID=$!
 
 pushd $DATADIR
 
+function expected
+{
+	echo "recipe.expected.$1.json"
+}
+
+function actual
+{
+	echo "recipe.actual.$1.json"
+}
+
 # generate: generates input for idx $1
 function generate
 {
-	echo ${TEMPLATE//Z/$i} > "recipe.$1.json"
+	FNAME="$(expected $1)"
+	echo ${TEMPLATE//Z/$1} > $FNAME
 
 	for ((j=0;j<$Y;j++)); do
-		jq -c '.ingredients += [ "VALUE" ]' "recipe.$1.json" | sponge "recipe.$1.json"
-		jq -c '.steps       += [ "VALUE" ]' "recipe.$1.json" | sponge "recipe.$1.json"
-		jq -c '.tags        += [ "VALUE" ]' "recipe.$1.json" | sponge "recipe.$1.json"
+		jq -c '.ingredients += ["VALUE"] | .steps += ["VALUE"] | .tags += ["VALUE"]' \
+			$FNAME | sponge $FNAME
 	done
 }
 
 # post: posts the recipe for index $1
 function post
 {
-	curl -s http://localhost:2000/api/v1/recipe -d @recipe.$1.json > /dev/null
+	curl -s http://localhost:2000/api/v1/recipe -d @$1 > /dev/null
 }
 
 # get: gets the recipe for index $1
@@ -80,7 +90,7 @@ function remove_id
 # put: puts the recipe for index $i
 function put
 {
-	curl -s -X PUT http://localhost:2000/api/v1/recipe/$1 -d @recipe.$1.json > /dev/null
+	curl -s -X PUT http://localhost:2000/api/v1/recipe/$1 -d @$2 > /dev/null
 }
 
 # delete: deletes the recipe for index $i
@@ -89,43 +99,54 @@ function delete
 	curl -s -X DELETE http://localhost:2000/api/v1/recipe/$1
 }
 
+# verify: compares two files, returns true if there's an error
+function verify
+{
+	# $1 - ID
+	# $2 - Expected
+	# $3 - Actual
+
+	CMP=$(diff <(jq -S -f $2 .) <(jq -S -f $3 .))
+
+	if [[ ! -z $CMP ]]; then
+		echo "Recipe $1 does not match what has been sent! $CMP bytes don't match!"
+		cat $2
+		cat $3
+		echo ""
+	fi
+}
+
 for ((i=1;i<=$X;i++)); do
 	generate $i
 done
 
 for ((i=1;i<=$X;i++)); do
-	post $i
+	post $(expected $i)
 done
 
 # GET all of the recipes, and compare
 for ((i=1;i<=$X;i++)); do
-	GENFILE="recipe.$i.json"
-	VERFILE="recipe.verify.$i.json"
-
-	get $i > $VERFILE ; remove_id $VERFILE
-
-	CMP=$(diff $GENFILE $VERFILE | wc -c)
-
-	if [ $CMP -gt 0 ]; then
-		echo "Recipe $i does not match what we initially sent!, $CMP bytes different"
-		cat "$DATADIR/$GENFILE"
-		cat "$DATADIR/$VERFILE"
-		exit 1
-	fi
+	get $i > $(actual $i); remove_id $(actual $i)
+	verify $i $(expected $i) $(actual $i)
 done
 
 # update the "pre-made values" (make the json blobs lower-case)
-for ((i=1;i<$X;i++)); do
-	cat "recipe.$i.json" | tr 'A-Z' 'a-z' | sponge "recipe.$i.json"
-	jq -c --arg id $i '. + {id: $id}' "recipe.$i.json" | sponge "recipe.$i.json"
+for ((i=1;i<=$X;i++)); do
+	# make everything lowercase, and add in the expected 'id'
+	cat $(expected $i) | tr 'A-Z' 'a-z' | sponge $(expected $i)
+	jq -S -c --argjson id $i '. + {id: $id}' $(expected $i) | sponge $(expected $i)
 done
 
 # PUT all of the recipes
 for ((i=1;i<=$X;i++)); do
-	put $i
+	put $i $(expected $i)
 done
 
-# TODO (Brian): still need to compare the updates
+# GET all of the recipes, and compare (again)
+for ((i=1;i<=$X;i++)); do
+	get $i > $(actual $i)
+	verify $i $(expected $i) $(actual $i)
+done
 
 # DELETE all of the recipes
 for ((i=1;i<=$X;i++)); do
