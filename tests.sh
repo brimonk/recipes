@@ -37,6 +37,8 @@ Y=10
 [ $# -gt 0 ] && X=$1 && shift
 [ $# -gt 0 ] && Y=$1 && shift
 
+set -e
+
 DATADIR=$(mktemp -d -t ci-XXXXXXXXXX)
 
 TEMPLATE='{"cook_time":"COOK TIME Z","ingredients":[],"name":"NAME Z","note":"Z","prep_time":"PREP TIME Z","servings":"Z","steps":[],"tags":[]}'
@@ -46,12 +48,22 @@ PID=$!
 
 cleanup()
 {
-	popd
-	kill $PID
+	# pop off the whole dir stack until we get to where we started
+	while [[ $(dirs -v | wc -l) -gt 1 ]]; do
+		popd
+	done
+
+	# kill the server if it's still alive
+	if [ -e /proc/$PID/status ]; then
+		kill $PID
+	fi
+
 	rm -rf $DATADIR
 }
 
-trap handler INT
+trap cleanup SIGINT
+trap cleanup SIGQUIT
+trap cleanup ERR
 
 pushd $DATADIR
 
