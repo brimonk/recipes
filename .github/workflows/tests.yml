@@ -15,7 +15,7 @@ jobs:
             - name: checkout code
               uses: actions/checkout@v2
             - name: install dependencies
-              run: sudo apt-get install libsodium-dev libmagic-dev libjansson-dev
+              run: sudo apt-get install libsodium-dev libmagic-dev libjansson-dev moreutils jq
             - name: build
               run: make
             # next, we run the 'tests.sh' script
