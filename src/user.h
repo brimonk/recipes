@@ -24,6 +24,13 @@ struct Login {
     char *password;
 };
 
+// WhoAmI : the results of calling the /whoami endpoint
+struct WhoAmI { // gross
+	char *username;
+	char *email;
+	user_id id;
+};
+
 // UserSession : this data gets concatenated with a ":", and base64 encoded, and stored in a cookie
 // This is what we use to determine if a user is who they say they are, and so on.
 struct UserSession {
