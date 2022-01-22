@@ -314,7 +314,7 @@ int send_file_index(struct mg_connection *conn, struct mg_http_message *hm)
 // send_error: sends an error
 int send_error(struct mg_connection *conn, int errcode)
 {
-	mg_http_reply(conn, errcode, NULL, NULL);
+	mg_http_reply(conn, errcode, NULL, "");
 
 	return 0;
 }
