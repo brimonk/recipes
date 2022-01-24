@@ -29,14 +29,26 @@ struct user_t *user_from_session(char *cookie);
 // newuser_add : adds the new user into the user table
 int newuser_add(struct NewUser *newuser);
 
+// user_from_httpmessage : just a shortcut that gets used in multiple places
+struct user_t *user_from_httpmessage(struct mg_http_message *hm);
+
 // newuser_free : frees the new user 
 void newuser_free(struct NewUser *newuser);
 
 // whoami_free : frees the strings and children, does not free this structure
 void whoami_free(struct WhoAmI *who);
 
+// login_free : frees the login 
+void login_free(struct Login *login);
+
+// login_from_json : parses a login structure from the input json
+struct Login *login_from_json(char *s);
+
 // user_set_cookie : write the header to set the user cookie in 's'
 int user_set_cookie(char *s, user_id id, size_t len);
+
+// user_from_credentials : returns a user pointer from the input credentials
+struct user_t *user_from_credentials(char *username, char *password);
 
 // user_to_whoami : converts a user structure to a whoami structure
 struct WhoAmI *user_to_whoami(struct user_t *user);
@@ -92,6 +104,33 @@ int user_api_newuser(struct mg_connection *conn, struct mg_http_message *hm)
 // user_api_login: endpoint, POST - /api/v1/user/login
 int user_api_login(struct mg_connection *conn, struct mg_http_message *hm)
 {
+    struct Login *login;
+    struct user_t *user;
+    char *json;
+
+    json = strndup(hm->body.ptr, hm->body.len);
+    if (json == NULL) {
+        return -1;
+    }
+
+    login = login_from_json(json);
+    free(json);
+
+    if (login == NULL) {
+        return -1;
+    }
+
+    user = user_from_credentials(login->username, login->password);
+    login_free(login);
+
+    int rc = user == NULL ? -1 : 0;
+
+    if (rc < 0) {
+        return -1;
+    }
+
+    mg_http_reply(conn, 200, NULL, "");
+
 	return 0;
 }
 
@@ -101,33 +140,20 @@ int user_api_logout(struct mg_connection *conn, struct mg_http_message *hm)
 	return 0;
 }
 
-// user_api_whoami: endpoint, /api/v1/user/whoami
+// user_api_whoami: endpoint, GET - /api/v1/user/whoami
 int user_api_whoami(struct mg_connection *conn, struct mg_http_message *hm)
 {
 	struct WhoAmI *who;
 	struct user_t *user;
-	struct mg_str *mg_cookie;
-	struct mg_str token;
-	char *cookie;
 	char *json;
 
-	mg_cookie = mg_http_get_header(hm, "Cookie");
-	if (mg_cookie == NULL) {
-		return -1; // cookie must be present
-	}
-
-	token = mg_http_get_header_var(*mg_cookie, mg_str("session"));
-	cookie = strndup(token.ptr, token.len);
-
-	user = user_from_session(cookie);
-	if (user == NULL) {
-		free(cookie);
-		return -1;
-	}
+    user = user_from_httpmessage(hm);
+    if (user == NULL) {
+        return -1;
+    }
 
 	who = user_to_whoami(user);
-	if (user == NULL) {
-		free(cookie);
+	if (who == NULL) {
 		return -1;
 	}
 
@@ -136,10 +162,78 @@ int user_api_whoami(struct mg_connection *conn, struct mg_http_message *hm)
 	mg_http_reply(conn, 200, NULL, json);
 
 	whoami_free(who);
-	free(cookie);
+
 	free(json);
 
 	return 0;
+}
+
+// user_from_httpmessage : just a shortcut that gets used in multiple places
+struct user_t *user_from_httpmessage(struct mg_http_message *hm)
+{
+    struct mg_str *mg_cookie;
+    struct mg_str token;
+	struct user_t *user;
+    char *cookie;
+
+    mg_cookie = mg_http_get_header(hm, "Cookie");
+    if (mg_cookie == NULL) {
+        return NULL;
+    }
+
+    token = mg_http_get_header_var(*mg_cookie, mg_str("session"));
+    if (token.ptr == NULL) {
+        return NULL;
+    }
+
+    cookie = strndup(token.ptr, token.len);
+
+    user = user_from_session(cookie);
+    if (user == NULL) {
+        free(cookie);
+        return NULL;
+    }
+
+    free(cookie);
+
+    return user;
+}
+
+// user_from_credentials : returns a user pointer from the input credentials
+struct user_t *user_from_credentials(char *username, char *password)
+{
+    size_t i;
+    struct user_t *user;
+    struct string_128_t *s_username;
+    struct string_128_t *s_password;
+    size_t passlen;
+    int rc;
+
+    passlen = strlen(password);
+
+    for (i = 1; i <= store_getlen(RT_USER); i++) {
+        user = store_getobj(RT_USER, i);
+        if (user == NULL)
+            continue;
+
+        s_username = store_getobj(RT_STRING128, user->username);
+        if (s_username == NULL)
+            continue; // how...?
+
+        if (!streq(s_username->string, username))
+            continue;
+
+        s_password = store_getobj(RT_STRING128, user->password);
+        if (s_password == NULL)
+            continue; // how...?
+
+        rc = crypto_pwhash_str_verify(s_password->string, password, passlen);
+
+        if (rc == 0)
+            return user;
+    }
+
+    return NULL;
 }
 
 // user_to_whoami : converts a user structure to a whoami structure
@@ -281,14 +375,14 @@ int newuser_add(struct NewUser *newuser)
 	randombytes_buf(salt->string, sizeof(salt->string));
 	user_record->salt = salt->base.id;
 
-	rc = crypto_pwhash(
-		(unsigned char *)password->string, sizeof(password->string),
-		newuser->password, strlen(newuser->password),
-		(unsigned char *)salt->string,
-		crypto_pwhash_OPSLIMIT_INTERACTIVE,
-		crypto_pwhash_MEMLIMIT_INTERACTIVE,
-		crypto_pwhash_ALG_DEFAULT
-		);
+    printf("need bytes: %d\n", crypto_pwhash_STRBYTES);
+
+    assert(sizeof(password->string) >= crypto_pwhash_STRBYTES);
+
+	rc = crypto_pwhash_str(
+        password->string, newuser->password, strlen(newuser->password),
+        crypto_pwhash_OPSLIMIT_SENSITIVE, crypto_pwhash_MEMLIMIT_SENSITIVE
+    );
 
 	// TODO (Brian): replace with an 'if' that returns some kind of server error
 	assert(rc == 0);
@@ -388,6 +482,46 @@ struct NewUser *newuser_from_json(char *s)
 	return user;
 }
 
+// login_from_json : parses a login structure from the input json
+struct Login *login_from_json(char *s)
+{
+    struct Login *login;
+    json_t *root;
+    json_error_t error;
+
+    json_t *username, *password;
+
+    root = json_loads(s, 0, &error);
+    if (root == NULL) {
+        return NULL;
+    }
+
+    if (!json_is_object(root)) {
+        return NULL;
+    }
+
+    username = json_object_get(root, "username");
+    if (!json_is_string(username)) {
+        json_decref(root);
+        return NULL;
+    }
+
+    password = json_object_get(root, "password");
+    if (!json_is_string(password)) {
+        json_decref(root);
+        return NULL;
+    }
+
+    login = calloc(1, sizeof(*login));
+
+    login->username = strdup(json_string_value(username));
+    login->password = strdup(json_string_value(password));
+
+    json_decref(root);
+
+    return login;
+}
+
 // whoami_to_json : converts a WhoAmI structure to a json blob
 char *whoami_to_json(struct WhoAmI *who)
 {
@@ -413,7 +547,7 @@ char *whoami_to_json(struct WhoAmI *who)
 	return json;
 }
 
-// newuser_free : frees the new user 
+// newuser_free : frees the new user structure
 void newuser_free(struct NewUser *newuser)
 {
 	if (newuser) {
@@ -425,7 +559,7 @@ void newuser_free(struct NewUser *newuser)
 	}
 }
 
-// login_free : frees the login 
+// login_free : frees the login structure
 void login_free(struct Login *login)
 {
 	if (login) {
