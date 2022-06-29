@@ -800,7 +800,7 @@ function HomeComponent(vnode) {
 
     return {
         view: function(vnode) {
-            return m("main", [
+            return m("div", [
                 m(MenuComponent),
                 m(SearchComponent)
             ]);
