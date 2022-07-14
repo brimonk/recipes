@@ -1,0 +1,24 @@
+name: Test CI
+
+on:
+    pull_request:
+    push:
+        branches:
+            - master
+
+jobs:
+    build:
+        runs-on: ubuntu-latest
+
+        # we have to build everything first
+        steps:
+            - name: checkout code
+              uses: actions/checkout@v2
+            - name: install dependencies
+              run: sudo apt-get install libsodium-dev libmagic-dev libjansson-dev
+            - name: build
+              run: make
+            # next, we run the 'tests.sh' script
+            - name: testexec
+              run: ./tests.sh
+
