@@ -5,6 +5,24 @@ const EMAIL_REGEX = /^(([^<>()[\]\\.,;:\s@\"]+(\.[^<>()[\]\\.,;:\s@\"]+)*)|(\".+
 
 let staticData = null;
 
+let user = null;
+
+function RefreshUserObject() {
+    m.request({
+        method: "GET",
+        url: `/api/v1/whoami`
+    }).then((x) => {
+        user = x;
+    }).catch((err) => {
+        // console.warn("We tried to fetch the user record, but we haven't been authenticated yet.")
+    });
+}
+
+// InvalidateUserObject : just sets the 'user' object to be null
+function InvalidateUserObject() {
+    user = null;
+}
+
 // FetchStaticData : setup the cookie disclaimer
 function FetchStaticData() {
     if (!staticData) {
@@ -782,7 +800,7 @@ function HomeComponent(vnode) {
 
     return {
         view: function(vnode) {
-            return m("main", [
+            return m("div", [
                 m(MenuComponent),
                 m(SearchComponent)
             ]);
@@ -889,6 +907,10 @@ class User {
             method: "POST",
             url: "/api/v1/user/create",
             body: data,
+        }).then((x) => {
+            RefreshUserObject();
+        }).catch((err) => {
+            InvalidateUserObject();
         });
     }
 
@@ -913,6 +935,10 @@ class User {
             method: "POST",
             url: "/api/v1/user/login",
             body: data,
+        }).then((x) => {
+            RefreshUserObject();
+        }).catch((err) => {
+            InvalidateUserObject();
         });
     }
 }
@@ -1042,10 +1068,11 @@ function NewUserComponent(vnode) {
                         url: "/api/v1/newuser",
                         body: user,
                     }).then((x) => {
+                        RefreshUserObject();
                         m.route.set("/");
                         console.log(x);
                     }).catch((err) => {
-                        console.error(err);
+                        InvalidateUserObject();
                     });
                 }),
                 Button("Cancel", (e) => m.route.set("/"))

@@ -24,6 +24,13 @@ struct Login {
     char *password;
 };
 
+// WhoAmI : the results of calling the /whoami endpoint
+struct WhoAmI { // gross
+	char *username;
+	char *email;
+	user_id id;
+};
+
 // UserSession : this data gets concatenated with a ":", and base64 encoded, and stored in a cookie
 // This is what we use to determine if a user is who they say they are, and so on.
 struct UserSession {
@@ -39,6 +46,9 @@ int user_api_login(struct mg_connection *conn, struct mg_http_message *hm);
 
 // user_api_logout: endpoint, /api/v1/user/logout
 int user_api_logout(struct mg_connection *conn, struct mg_http_message *hm);
+
+// user_api_whoami: endpoint, /api/v1/user/whoami
+int user_api_whoami(struct mg_connection *conn, struct mg_http_message *hm);
 
 #endif // USER_H
 

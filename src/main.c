@@ -2,24 +2,26 @@
 // 2021-06-08 20:04:01
 //
 // TODO (Brian)
-// - New User
-// - Login
+// - API
+//   - Login
 // - Session Cookies
 // - All Strings are in a HashMap
 // - Timing Regex (Frontend / Backend)
-// - HTTP Parsing Bug (Why?) (Library doesn't handle malformed inputs?)
+//
+// - Image Upload
+//   - Recipes
+//   - User Profiles
+//
+// - User Settings Page
+//   - Password
+//   - Profile Picture
+//   - Email Change?
+//
+// - Email Verification
+//
+// - Forgot Password / Email Password Reset
 //
 // - Performance Tests
-//
-//   Full Recipe Tests:
-//     - x1000 Recipes
-//     - Create
-//     - Read (Search)
-//     - Read (Individual)
-//     - Update
-//     - Read (Search)
-//     - Read (Individual)
-//     - Delete
 //
 //   Full User Tests:
 //     - 1000 Users
@@ -71,6 +73,8 @@ void request_handler(struct mg_connection *conn, struct mg_http_message *hm);
 
 // send_file_static : sends the static data JSON blob
 int send_file_static(struct mg_connection *conn, struct mg_http_message *hm);
+// send_file_mithriljs : sends the javascript for the ui to the user
+int send_file_mithriljs(struct mg_connection *conn, struct mg_http_message *hm);
 // send_file_uijs : sends the javascript for the ui to the user
 int send_file_uijs(struct mg_connection *conn, struct mg_http_message *hm);
 // send_file_styles : sends the styles file to the user
@@ -127,11 +131,15 @@ int main(int argc, char **argv)
 	ht_set(routes, "DELETE /api/v1/recipe/:id", (void *)recipe_api_delete);
 
 	ht_set(routes, "POST /api/v1/newuser", (void *)user_api_newuser);
+	ht_set(routes, "POST /api/v1/login", (void *)user_api_login);
+	ht_set(routes, "POST /api/v1/logout", (void *)user_api_logout);
+	ht_set(routes, "GET /api/v1/whoami", (void *)user_api_whoami);
 
 	ht_set(routes, "GET /api/v1/tags", (void *)tag_api_getlist);
 
 	ht_set(routes, "GET /api/v1/static", (void *)send_file_static);
 	ht_set(routes, "GET /ui.js", (void *)send_file_uijs);
+	ht_set(routes, "GET /mithril.js", (void *)send_file_mithriljs);
 	ht_set(routes, "GET /styles.css", (void *)send_file_styles);
 	ht_set(routes, "GET /index.html", (void *)send_file_index);
 	ht_set(routes, "GET /", (void *)send_file_index);
@@ -269,6 +277,19 @@ int send_file_static(struct mg_connection *conn, struct mg_http_message *hm)
 	return 0;
 }
 
+// send_file_mithriljs : sends the javascript for the ui to the user
+int send_file_mithriljs(struct mg_connection *conn, struct mg_http_message *hm)
+{
+	struct mg_http_serve_opts opts = {
+		.mime_types = "text/javascript"
+	};
+
+	mg_http_serve_file(conn, hm, "lib/mithril.js", &opts);
+
+	return 0;
+}
+
+
 // send_file_uijs : sends the javascript for the ui to the user
 int send_file_uijs(struct mg_connection *conn, struct mg_http_message *hm)
 {
@@ -309,7 +330,7 @@ int send_file_index(struct mg_connection *conn, struct mg_http_message *hm)
 // send_error: sends an error
 int send_error(struct mg_connection *conn, int errcode)
 {
-	mg_http_reply(conn, errcode, NULL, NULL);
+	mg_http_reply(conn, errcode, NULL, "");
 
 	return 0;
 }
