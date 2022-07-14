@@ -73,6 +73,8 @@ void request_handler(struct mg_connection *conn, struct mg_http_message *hm);
 
 // send_file_static : sends the static data JSON blob
 int send_file_static(struct mg_connection *conn, struct mg_http_message *hm);
+// send_file_mithriljs : sends the javascript for the ui to the user
+int send_file_mithriljs(struct mg_connection *conn, struct mg_http_message *hm);
 // send_file_uijs : sends the javascript for the ui to the user
 int send_file_uijs(struct mg_connection *conn, struct mg_http_message *hm);
 // send_file_styles : sends the styles file to the user
@@ -137,6 +139,7 @@ int main(int argc, char **argv)
 
 	ht_set(routes, "GET /api/v1/static", (void *)send_file_static);
 	ht_set(routes, "GET /ui.js", (void *)send_file_uijs);
+	ht_set(routes, "GET /mithril.js", (void *)send_file_mithriljs);
 	ht_set(routes, "GET /styles.css", (void *)send_file_styles);
 	ht_set(routes, "GET /index.html", (void *)send_file_index);
 	ht_set(routes, "GET /", (void *)send_file_index);
@@ -273,6 +276,19 @@ int send_file_static(struct mg_connection *conn, struct mg_http_message *hm)
 
 	return 0;
 }
+
+// send_file_mithriljs : sends the javascript for the ui to the user
+int send_file_mithriljs(struct mg_connection *conn, struct mg_http_message *hm)
+{
+	struct mg_http_serve_opts opts = {
+		.mime_types = "text/javascript"
+	};
+
+	mg_http_serve_file(conn, hm, "lib/mithril.js", &opts);
+
+	return 0;
+}
+
 
 // send_file_uijs : sends the javascript for the ui to the user
 int send_file_uijs(struct mg_connection *conn, struct mg_http_message *hm)
