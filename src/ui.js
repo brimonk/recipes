@@ -7,12 +7,14 @@ let staticData = null;
 
 let user = null;
 
+// RefreshUserObject : fetches the user object from the backend
 function RefreshUserObject() {
     m.request({
         method: "GET",
         url: `/api/v1/whoami`
     }).then((x) => {
         user = x;
+        m.redraw();
     }).catch((err) => {
         // console.warn("We tried to fetch the user record, but we haven't been authenticated yet.")
     });
@@ -21,6 +23,37 @@ function RefreshUserObject() {
 // InvalidateUserObject : just sets the 'user' object to be null
 function InvalidateUserObject() {
     user = null;
+}
+
+// Login : logs the user in
+function Login(username, password) {
+    m.request({
+        method: "POST",
+        url: `/api/v1/login`,
+        body: {
+            username: username,
+            password: password
+        }
+    }).then((x) => {
+        RefreshUserObject();
+    }).catch((err) => {
+        console.warn("We couldn't login for some reason!");
+    });
+}
+
+// Logout : logs the user out
+function Logout() {
+    m.request({
+        method: "POST",
+        url: `/api/v1/logout`
+    }).then((x) => {
+        InvalidateUserObject();
+    }).catch((err) => {
+        console.warn(`there was some kind of error! '${err}'`)
+        InvalidateUserObject();
+    });
+
+    InvalidateUserObject();
 }
 
 // FetchStaticData : setup the cookie disclaimer
@@ -332,23 +365,41 @@ function ListComponent(vnode) {
 
 // MenuComponent : draws the menu at the top(ish) of the screen
 function MenuComponent(vnode) {
+    const leftButton = { class: "mui--appbar-height" };
+    const rightButton = { class: "mui--appbar-height", align: "right" };
+
     return {
         view: function(vnode) {
+            let userButton = null;
+
+            if (user === null) {
+                userButton = m("td", {...rightButton}, m(m.route.Link, {
+                    href: "/login", style: "color: white"
+                }, "Login"));
+            } else {
+                userButton = m("td", {
+                    ...rightButton, onclick: (e) => {
+                        InvalidateUserObject();
+                        m.redraw();
+                    },
+                }, m(m.route.Link, {
+                    href: "/", style: "color: white"
+                }, "Logout"));
+            }
+
             return m("div", { class: "mui-appbar", style: "padding: 0 2em" }, 
                 m("table", { width: "100%" },
                     m("tr", { style: "vertical-align:middle" }, [
 
-                        m("td", { class: "mui--appbar-height" }, m(m.route.Link, {
+                        m("td", leftButton, m(m.route.Link, {
                             href: "/", style: "color: white"
                         }, "Home")),
 
-                        m("td", { class: "mui--appbar-height" }, m(m.route.Link, {
+                        m("td", leftButton, m(m.route.Link, {
                             href: "/recipe/new", style: "color: white"
                         }, "New Recipe")),
 
-                        m("td", { class: "mui--appbar-height", align: "right" }, m(m.route.Link, {
-                            href: "/newuser", style: "color: white"
-                        }, "New User / Login")),
+                        userButton
                     ])
                 )
             );
@@ -995,7 +1046,7 @@ function UserValidate(user) {
 
 // LoginComponent
 function LoginComponent(inivialVnode) {
-    const user = {
+    const localUser = {
         context: "login"
     };
 
@@ -1004,16 +1055,16 @@ function LoginComponent(inivialVnode) {
     return {
         view: function(vnode) {
             let email = m(InputComponent, {
-                object: user, prop: "email", label: "Email", type: "email", maxlen: 128
+                object: localUser, prop: "username", label: "Username", type: "text", maxlen: 128
             });
 
             let password = m(InputComponent, {
-                object: user, prop: "password", label: "Password", type: "password", maxlen: 128
+                object: localUser, prop: "password", label: "Password", type: "password", maxlen: 128
             });
 
             let buttons = [
                 ButtonPrimary("Login", (e) => {
-                    console.log("LOG ME IN!!");
+                    Login(localUser.username, localUser.password);
                 }),
                 Button("Cancel", (e) => m.route.set("/"))
             ];
@@ -1029,7 +1080,11 @@ function LoginComponent(inivialVnode) {
 
                 DIV(buttons),
 
-                P(StaticDataOrBlank(staticData?.cookieDisclaimer)),
+                m("p", m("b", "If you don't have an account, you can create one ",
+                    m(m.route.Link, { href: "/newuser" }, "here"), "."
+                )),
+
+                P(StaticDataOrBlank(staticData?.cookieDisclaimer))
             ];
         },
     };
