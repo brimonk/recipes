@@ -30,22 +30,27 @@
 #include <jansson.h>
 
 #include "mongoose.h"
+#include "sqlite3.h"
 
 #include "recipe.h"
 #include "objects.h"
-#include "store.h"
+
+extern sqlite3 *DATABASE;
 
 // recipe_free : frees all of the data in the recipe object
 void recipe_free(struct Recipe *recipe);
 
-// recipe_add : adds a recipe to the backing store
-s64 recipe_add(struct Recipe *recipe);
+// recipe_get_by_id : fetches a recipe object from the store, and parses it
+struct Recipe *recipe_get_by_id(char *id);
 
-// recipe_get : fetches a recipe object from the store, and parses it
-struct Recipe *recipe_get(s64 id);
+// recipe_insert : adds a recipe to the backing store
+int recipe_insert(struct Recipe *recipe);
+
+// recipe_update: updates the recipe in the database
+int recipe_update(Recipe *recipe);
 
 // recipe_delete : marks the recipe at 'id', as unallocated
-s64 recipe_delete(s64 id);
+int recipe_delete(char *id);
 
 // recipe_validation : returns non-zero if the input object is invalid
 int recipe_validation(struct Recipe *recipe);
@@ -56,17 +61,8 @@ static struct Recipe *recipe_from_json(char *s);
 // recipe_to_json : converts a Recipe to a JSON string
 static char *recipe_to_json(struct Recipe *recipe);
 
-// search_results_to_json : converts the search records from memory to JSON
-char *search_results_to_json(struct RecipeResultRecords *records);
-
-// search_matches : returns true if the recipe matches the text, false if it doesn't
-int search_matches(recipe_id id, char *text);
-
 // recipe_search : fills out a search structure with results
-struct RecipeResultRecords *recipe_search(struct SearchQuery *search);
-
-// search_results_free : frees the recipe result search records
-void search_results_free(struct RecipeResultRecords *records);
+json_t *recipe_search(struct UI_SearchQuery *query);
 
 // NOTE (Brian): I'm putting this here because I'm not sure where else it's really going to be used.
 // Feel free to move it in the future
@@ -74,9 +70,9 @@ void search_results_free(struct RecipeResultRecords *records);
 // recipe_api_post : endpoint, POST - /api/v1/recipe
 int recipe_api_post(struct mg_connection *conn, struct mg_http_message *hm)
 {
-	recipe_id id;
 	struct Recipe *recipe;
 	char *body;
+	int rc;
 
 	body = strndup(hm->body.ptr, hm->body.len);
 
@@ -94,13 +90,13 @@ int recipe_api_post(struct mg_connection *conn, struct mg_http_message *hm)
 		return -1;
 	}
 
-	id = recipe_add(recipe);
-	if (id < 0) {
+	rc = recipe_insert(recipe);
+	if (rc < 0) {
 		ERR("couldn't save the recipe to the disk!\n");
 		return -1;
 	}
 
-	mg_http_reply(conn, 200, NULL, "{\"id\":%lld}", id);
+	mg_http_reply(conn, 200, NULL, "{\"id\":\"%s\"}", recipe->metadata.id);
 
 	recipe_free(recipe);
 
@@ -110,15 +106,15 @@ int recipe_api_post(struct mg_connection *conn, struct mg_http_message *hm)
 // recipe_api_put : endpoint, PUT - /api/v1/recipe/{id}
 int recipe_api_put(struct mg_connection *conn, struct mg_http_message *hm)
 {
-	recipe_id id;
 	s64 rc;
 	struct Recipe *recipe;
 	char *url;
 	char *json;
+	char id[128] = {0};
 
 	url = strndup(hm->uri.ptr, hm->uri.len);
 
-	rc = sscanf(url, "/api/v1/recipe/%lld", &id);
+	rc = sscanf(url, "/api/v1/recipe/%127s", id);
 	assert(rc == 1);
 
 	free(url);
@@ -142,19 +138,13 @@ int recipe_api_put(struct mg_connection *conn, struct mg_http_message *hm)
 		return -1;
 	}
 
-	rc = recipe_delete(id);
+	rc = recipe_update(recipe);
 	if (rc < 0) {
-		ERR("couldn't nuke the recipe!\n");
+		ERR("couldn't update the recipe!\n");
 		return -1;
 	}
 
-	id = recipe_add(recipe);
-	if (id < 0) {
-		ERR("couldn't make the new recipe!\n");
-		return -1;
-	}
-
-	mg_http_reply(conn, 200, NULL, "{\"id\":%lld}", id);
+	mg_http_reply(conn, 200, NULL, "{\"id\":\"%s\"}", recipe->metadata.id);
 
 	recipe_free(recipe);
 
@@ -164,20 +154,20 @@ int recipe_api_put(struct mg_connection *conn, struct mg_http_message *hm)
 // recipe_api_get : endpoint, GET - /api/v1/recipe/{id}
 int recipe_api_get(struct mg_connection *conn, struct mg_http_message *hm)
 {
-	recipe_id id;
 	struct Recipe *recipe;
 	char *url;
 	char *json;
 	int rc;
+	char id[128] = {0};
 
 	url = strndup(hm->uri.ptr, hm->uri.len);
 
-	rc = sscanf(url, "/api/v1/recipe/%lld", &id);
+	rc = sscanf(url, "/api/v1/recipe/%127s", id);
 	assert(rc == 1);
 
 	free(url);
 
-	recipe = recipe_get(id);
+	recipe = recipe_get_by_id(id);
 	if (recipe == NULL) { // TODO (Brian): return HTTP error
 		ERR("couldn't fetch the recipe from the database!\n");
 		return -1;
@@ -200,52 +190,34 @@ int recipe_api_get(struct mg_connection *conn, struct mg_http_message *hm)
 // recipe_api_getlist : endpoint, GET - /api/v1/recipe/list
 int recipe_api_getlist(struct mg_connection *conn, struct mg_http_message *hm)
 {
-	struct SearchQuery query;
-	char *json;
 	char tbuf[BUFSMALL];
 	int rc;
 
-	memset(&query, 0, sizeof query);
+	char *columns[] = { "name", "prep_time", "cook_time", "servings", NULL };
+	struct UI_SearchQuery query = {
+		.table = "recipes",
+		.columns = columns,
+		.page_size = 20,
+		.page_number = 0,
+		.search = NULL
+	};
 
-	query.page_size = 20;
-	query.page_number = 0;
-	query.text = NULL;
+	rc = mg_http_get_var(&hm->query, "siz", tbuf, sizeof tbuf);
+	if (rc >= 0 && isdigit(tbuf[0])) { query.page_size = atol(tbuf); }
 
-	{
-		memset(tbuf, 0, sizeof tbuf);
-		rc = mg_http_get_var(&hm->query, "siz", tbuf, sizeof tbuf);
-		if (isdigit(tbuf[0])) {
-			query.page_size = atol(tbuf);
-		}
-	}
+	rc = mg_http_get_var(&hm->query, "num", tbuf, sizeof tbuf);
+	if (rc >= 0 && isdigit(tbuf[0])) { query.page_number = atol(tbuf); }
 
-	{
-		memset(tbuf, 0, sizeof tbuf);
-		rc = mg_http_get_var(&hm->query, "num", tbuf, sizeof tbuf);
-		if (isdigit(tbuf[0])) {
-			query.page_number = atol(tbuf);
-		}
-	}
+	rc = mg_http_get_var(&hm->query, "q", tbuf, sizeof tbuf);
+	if (rc >= 0 && isdigit(tbuf[0])) { query.search = tbuf; }
 
-	{
-		memset(tbuf, 0, sizeof tbuf);
-		rc = mg_http_get_var(&hm->query, "q", tbuf, sizeof tbuf - 1);
-		if (rc != 0) {
-			query.text = tbuf;
-		}
-	}
-
-	struct RecipeResultRecords *results;
-
-	results = recipe_search(&query);
-
-	json = search_results_to_json(results);
-
-	search_results_free(results);
+	json_t *json = recipe_search(&query);
+	char *json_str = json_dumps(json, JSON_SORT_KEYS|JSON_COMPACT);
+	json_decref(json);
 
 	mg_http_reply(conn, 200, NULL, "%s", json);
 
-	free(json);
+	free(json_str);
 
 	return 0;
 }
@@ -253,13 +225,13 @@ int recipe_api_getlist(struct mg_connection *conn, struct mg_http_message *hm)
 // recipe_api_delete : endpoint, DELETE - /api/v1/recipe/{id}
 int recipe_api_delete(struct mg_connection *conn, struct mg_http_message *hm)
 {
-	recipe_id id;
 	char *url;
 	int rc;
+	char id[128];
 
 	url = strndup(hm->uri.ptr, hm->uri.len);
 
-	rc = sscanf(url, "/api/v1/recipe/%lld", &id);
+	rc = sscanf(url, "/api/v1/recipe/%s", id);
 	assert(rc == 1);
 
 	free(url);
@@ -276,442 +248,83 @@ int recipe_api_delete(struct mg_connection *conn, struct mg_http_message *hm)
 	return 0;
 }
 
-// recipe_add : adds a recipe to the backing store
-s64 recipe_add(struct Recipe *recipe)
+// recipe_insert: adds a recipe to the database. writes DB_Metadata into the recipe pointer after add
+int recipe_insert(Recipe *recipe)
 {
-	recipe_t *record;
+	sqlite3_stmt *stmt;
+	int64_t rowid;
+	int rc;
 
-	ingredient_t *ingredient;
-	step_t *step;
-	tag_t *tag;
+	char *query =
+		"insert into recipes (name, prep_time, cook_time, servings, notes) values (?, ?, ?, ?, ?);";
 
-	string_128_t *string128;
-	string_256_t *string256;
-
-	size_t i;
-
-	record = store_addobj(RT_RECIPE);
-
-#if 0
-	record->user_id = recipe->user_id;
-#endif
-
-	string128 = store_addobj(RT_STRING128);
-	strncpy(string128->string, recipe->name, sizeof(string128->string));
-	record->name_id = string128->base.id;
-
-	string128 = store_addobj(RT_STRING128);
-	strncpy(string128->string, recipe->prep_time, sizeof(string128->string));
-	record->prep_time_id = string128->base.id;
-
-	string128 = store_addobj(RT_STRING128);
-	strncpy(string128->string, recipe->cook_time, sizeof(string128->string));
-	record->cook_time_id = string128->base.id;
-
-	string128 = store_addobj(RT_STRING128);
-	strncpy(string128->string, recipe->servings, sizeof(string128->string));
-	record->servings_id = string128->base.id;
-
-	if (recipe->note != NULL) {
-		string256 = store_addobj(RT_STRING256);
-		strncpy(string256->string, recipe->note, sizeof(string256->string));
-		record->note_id = string256->base.id;
-	}
-
-	if (recipe->note != NULL) {
-		strncpy(string256->string, recipe->note, sizeof(string256->string));
-	}
-
-	for (i = 0; i < recipe->ingredients_len; i++) {
-		string128 = store_addobj(RT_STRING128);
-		strncpy(string128->string, recipe->ingredients[i], sizeof(string128->string));
-
-		ingredient = store_addobj(RT_INGREDIENT);
-
-		ingredient->string_id = string128->base.id;
-		ingredient->recipe_id = record->base.id;
-	}
-
-	for (i = 0; i < recipe->steps_len; i++) {
-		string128 = store_addobj(RT_STRING128);
-		strncpy(string128->string, recipe->steps[i], sizeof(string128->string));
-
-		step = store_addobj(RT_STEP);
-
-		step->string_id = string128->base.id;
-		step->recipe_id = record->base.id;
-	}
-
-	for (i = 0; i < recipe->tags_len; i++) {
-		string128 = store_addobj(RT_STRING128);
-		strncpy(string128->string, recipe->tags[i], sizeof(string128->string));
-
-		tag = store_addobj(RT_TAG);
-
-		tag->string_id = string128->base.id;
-		tag->recipe_id = record->base.id;
-	}
-
-	store_write();
-
-	return record->base.id;
-}
-
-// recipe_get : fetches a recipe object from the store, and parses it
-struct Recipe *recipe_get(s64 id)
-{
-	struct Recipe *recipe;
-	recipe_t *record;
-
-	ingredient_t *ingredient;
-	step_t *step;
-	tag_t *tag;
-
-	string_128_t *string128;
-	string_256_t *string256;
-
-	size_t i, len;
-
-	record = store_getobj(RT_RECIPE, id);
-	if (record == NULL) {
-		return NULL;
-	}
-
-	recipe = calloc(1, sizeof(*recipe));
-	if (recipe == NULL) {
-		return NULL;
-	}
-
-	recipe->id = record->base.id;
-
-	string128 = store_getobj(RT_STRING128, record->name_id);
-	recipe->name = strndup(string128->string, sizeof(string128->string));
-
-	string128 = store_getobj(RT_STRING128, record->prep_time_id);
-	recipe->prep_time = strndup(string128->string, sizeof(string128->string));
-
-	string128 = store_getobj(RT_STRING128, record->cook_time_id);
-	recipe->cook_time = strndup(string128->string, sizeof(string128->string));
-
-	string128 = store_getobj(RT_STRING128, record->servings_id);
-	recipe->servings = strndup(string128->string, sizeof(string128->string));
-
-	string256 = store_getobj(RT_STRING256, record->note_id);
-	if (string256 != NULL) {
-		recipe->note = strndup(string256->string, sizeof(string256->string));
-	}
-
-	// NOTE (Brian): the wrapping NULL checks make sure the item is actually in use
-
-	// aggregate all of the ingredients
-	for (i = 1, len = store_getlen(RT_INGREDIENT); i <= len; i++) {
-		ingredient = store_getobj(RT_INGREDIENT, i);
-		if (ingredient != NULL && recipe->id == ingredient->recipe_id) {
-			string128 = store_getobj(RT_STRING128, ingredient->string_id);
-
-			recipe->ingredients[recipe->ingredients_len++] =
-				strndup(string128->string, sizeof(string128->string));
-		}
-	}
-
-	// aggregate all of the steps
-	for (i = 1, len = store_getlen(RT_STEP); i <= len; i++) {
-		step = store_getobj(RT_STEP, i);
-		if (step != NULL && recipe->id == step->recipe_id) {
-			string128 = store_getobj(RT_STRING128, step->string_id);
-
-			recipe->steps[recipe->steps_len++] =
-				strndup(string128->string, sizeof(string128->string));
-		}
-	}
-
-	// aggregate all of the tags
-	for (i = 1, len = store_getlen(RT_TAG); i <= len; i++) {
-		tag = store_getobj(RT_TAG, i);
-		if (tag != NULL && recipe->id == tag->recipe_id) {
-			string128 = store_getobj(RT_STRING128, tag->string_id);
-
-			recipe->tags[recipe->tags_len++] =
-				strndup(string128->string, sizeof(string128->string));
-		}
-	}
-
-	return recipe;
-}
-
-// recipe_delete : marks the recipe at 'id', as unallocated
-s64 recipe_delete(s64 id)
-{
-	// NOTE (Brian): deleting any objects in the system is SUPER easy. You just scan across the
-	// table, and you mark those slots as free.
-
-	size_t i, len;
-	recipe_t *recipe;
-
-	recipe = store_getobj(RT_RECIPE, id);
-	if (recipe == NULL) {
+	rc = sqlite3_prepare_v2(DATABASE, query, -1, &stmt, NULL);
+	if (rc != SQLITE_OK) {
 		return -1;
 	}
 
-	for (i = 1, len = store_getlen(RT_INGREDIENT); i <= len; i++) {
-		ingredient_t *ingredient;
-		ingredient = store_getobj(RT_INGREDIENT, i);
-		if (ingredient != NULL && recipe->base.id == ingredient->recipe_id) {
-			store_freeobj(RT_STRING128, ingredient->string_id);
-			store_freeobj(RT_INGREDIENT, i);
-		}
+	// TODO (Brian) finish insert
+
+	rowid = sqlite3_last_insert_rowid(DATABASE);
+
+	rc = db_load_metadata_from_rowid(&recipe->metadata, "recipes", rowid);
+	if (rc < 0) {
+		return -1; // ?
 	}
-
-	for (i = 1, len = store_getlen(RT_STEP); i <= len; i++) {
-		step_t *step;
-		step = store_getobj(RT_STEP, i);
-		if (step != NULL && recipe->base.id == step->recipe_id) {
-			store_freeobj(RT_STRING128, step->string_id);
-			store_freeobj(RT_STEP, i);
-		}
-	}
-
-	for (i = 1, len = store_getlen(RT_TAG); i <= len; i++) {
-		tag_t *tag;
-		tag = store_getobj(RT_TAG, i);
-		if (tag != NULL && recipe->base.id == tag->recipe_id) {
-			store_freeobj(RT_STRING128, tag->string_id);
-			store_freeobj(RT_TAG, i);
-		}
-	}
-
-	store_freeobj(RT_STRING128, recipe->name_id);
-
-	if (0 < recipe->note_id) {
-		store_freeobj(RT_STRING256, recipe->note_id);
-	}
-
-	store_freeobj(RT_RECIPE, id);
-
-	store_write();
 
 	return 0;
 }
 
-// search_matches : returns true if the recipe matches the text, false if it doesn't
-int search_matches(recipe_id id, char *text)
+// recipe_update: updates the recipe in the database
+int recipe_update(Recipe *recipe)
 {
-	recipe_t *recipe;
-	string_128_t *name, *tagtext;
-	int rc;
-	size_t i;
+	return 0;
+}
 
-	// WARN (Brian): BUFLARGE needs to be larger than any one string (it is as of writing)
-	char buf[BUFLARGE];
+// recipe_get_by_id : fetches a recipe object from the store by id, and parses it
+struct Recipe *recipe_get_by_id(char *id)
+{
+	Recipe *recipe = NULL;
+	return recipe;
+}
 
-	if (text == NULL) {
-		text = "";
-	}
-
-	if (strlen(text) == 0) {
-		return 1;
-	}
-
-	recipe = store_getobj(RT_RECIPE, id);
-	if (recipe == NULL) {
-		return 0;
-	}
-
-	name = store_getobj(RT_STRING128, recipe->name_id);
-	if (name == NULL) {
-		return -1;
-	}
-
-	// NOTE (Brian): GNU doesn't have a strnstr function, so at some point we should probably
-	// write our own.
-
-	memset(buf, 0, sizeof buf);
-	memcpy(buf, name->string, sizeof(name->string));
-
-	rc = strcasestr(buf, text) != NULL;
-
-	if (rc) {
-		return rc;
-	}
-
-	for (i = 0; i < store_getlen(RT_TAG); i++) {
-		tag_t *tag = store_getobj(RT_TAG, i);
-		if (tag == NULL || tag->recipe_id != id) {
-			continue;
-		}
-
-		tagtext = store_getobj(RT_STRING128, tag->string_id);
-
-		memset(buf, 0, sizeof buf);
-		memcpy(buf, tagtext->string, sizeof(tagtext->string));
-
-		rc = strcasestr(buf, text) != NULL;
-
-		if (rc) {
-			return rc;
-		}
-	}
-
-	return rc;
+// recipe_delete : updates 'deleted_ts' on the given recipe, such that it is 'deleted'
+int recipe_delete(char *id)
+{
+	// TODO (Brian) make me actually update the table
+	return 0;
 }
 
 // recipe_search : fills out a search structure with results
-struct RecipeResultRecords *recipe_search(struct SearchQuery *search)
+json_t *recipe_search(struct UI_SearchQuery *query)
 {
-	struct RecipeResultRecords *records;
-	recipe_t *recipe;
-	string_128_t *name;
-	string_128_t *prep_time;
-	string_128_t *cook_time;
-	string_128_t *servings;
-	size_t i;
-	size_t len;
-	size_t skip;
-	size_t page_size;
-	size_t page_number;
-
-	assert(search != NULL);
-
-	records = calloc(1, sizeof(*records));
-	if (records == NULL) {
-		return NULL;
-	}
-
-	page_size = search->page_size;
-	page_number = search->page_number;
-
-	skip = page_size * page_number;
-
-	// NOTE (Brian):
-	//
-	// For performance speedups, we'll need to compute / store an index to walk instead. For the
-	// moment, we sure do just check every single record. This really doesn't scale too well.
-	//
-	// It's also the case that at some point, we really want something that looks like bsearch, or
-	// similar to find items from the hunks. We'd probably want something like this:
-	//
-	//     store_find(int type, s64 id, int (*func)(void *), void *param);
-	//
-	// Where the search criteria can be passed as the void *param. As of now, none of these things
-	// are sorted in any way. It could be useful to basically create indexes for every column, so
-	// you could maybe have something like this:
-	//
-	//     store_find_idx(int type, s64 id, int (*func)(void *), void *param, int idx);
-	//
-	// And that function could work just like bsearch, with possible search comparator functions for
-	// the individual record types. That being said, I don't know how you'd do anything about the
-	// integer indexes. We'd probably just have to assign the next highest int, and perform our
-	// searches just like a database at that point.
-	//
-	// Basically, I haven't found any super satisfying ways to do this searching.
-
-	// NOTE (Brian): Now we get to do our dynamic allocation, to pull back page_size records.
-	records->records_cap = page_size;
-	records->records = calloc(records->records_cap, sizeof(*records->records));
-
-	for (i = 1, len = store_getlen(RT_RECIPE); i <= len; i++) {
-		if (store_isused(RT_RECIPE, i) && search_matches((recipe_id)i, search->text)) {
-			records->matches++;
-
-			if (skip) {
-				// we have to skip some records because we aren't on the first page
-				skip--;
-			} else if (records->records_len < records->records_cap) {
-				// we can pull back this record
-				struct RecipeResultRecord *result;
-
-				// NOTE (Brian): these are pointer fetches, so they should always be pretty quick...
-				recipe = store_getobj(RT_RECIPE, i);
-
-				name = store_getobj(RT_STRING128, recipe->name_id);
-				if (name == NULL) { // HOW THE FUCK
-					break;
-				}
-
-				prep_time = store_getobj(RT_STRING128, recipe->prep_time_id);
-				if (prep_time == NULL) { // HOW THE FUCK
-					break;
-				}
-
-				cook_time = store_getobj(RT_STRING128, recipe->cook_time_id);
-				if (cook_time == NULL) { // HOW THE FUCK
-					break;
-				}
-
-				servings = store_getobj(RT_STRING128, recipe->servings_id);
-				if (servings == NULL) { // HOW THE FUCK
-					break;
-				}
-
-				result = records->records + records->records_len++;
-
-				result->id = recipe->base.id;
-
-				strncpy(result->name, name->string, sizeof(result->name));
-				strncpy(result->prep_time, prep_time->string, sizeof(result->prep_time));
-				strncpy(result->cook_time, cook_time->string, sizeof(result->cook_time));
-				strncpy(result->servings, servings->string, sizeof(result->servings));
-			}
-		}
-	}
-
-	return records;
+	assert(query != NULL);
+	return db_search_to_json(query);
 }
 
 // recipe_validation : returns non-zero if the input object is invalid
 int recipe_validation(struct Recipe *recipe)
 {
-	size_t i;
+#define VALID_PTR(P_)     if ((P_)) { return -1; }
+#define VALID_STR(S_, L_) if ((S_) == NULL || (L_) <= strlen(S_)) { return -1; }
 
-	if (recipe == NULL) {
-		return -1;
-	}
+	VALID_PTR(recipe);
+	VALID_PTR(recipe->name); VALID_STR(recipe->name, 100);
+	VALID_PTR(recipe->prep_time); VALID_STR(recipe->prep_time, 100);
+	VALID_PTR(recipe->cook_time); VALID_STR(recipe->cook_time, 100);
+	VALID_PTR(recipe->servings); VALID_STR(recipe->servings, 100);
+	VALID_PTR(recipe->notes); VALID_STR(recipe->notes, 100);
 
-	if (recipe->name == NULL || 128 <= strlen(recipe->name)) {
-		return -1;
-	}
-
-	if (recipe->prep_time <= 0) {
-		return -1;
-	}
-
-	if (recipe->cook_time <= 0) {
-		return -1;
+	for (U_TextList *curr = recipe->ingredients; curr; curr = curr->next) {
+		VALID_PTR(curr == NULL); VALID_PTR(curr->text == NULL); VALID_STR(curr->text, 128);
 	}
 
-	if (recipe->servings <= 0) {
-		return -1;
+	for (U_TextList *curr = recipe->steps; curr; curr = curr->next) {
+		VALID_PTR(curr == NULL); VALID_PTR(curr->text == NULL); VALID_STR(curr->text, 128);
 	}
 
-	if (recipe->note != NULL && 256 <= strlen(recipe->note)) {
-		return -1;
-	}
-
-	if (ARRSIZE(recipe->ingredients) < recipe->ingredients_len) {
-		return -1;
-	}
-	for (i = 0; i < recipe->ingredients_len; i++) {
-		if (128 <= strlen(recipe->ingredients[i])) {
-			return -1;
-		}
-	}
-
-	if (ARRSIZE(recipe->steps) < recipe->steps_len) {
-		return -1;
-	}
-	for (i = 0; i < recipe->steps_len; i++) {
-		if (128 <= strlen(recipe->steps[i])) {
-			return -1;
-		}
-	}
-
-	if (ARRSIZE(recipe->tags) < recipe->tags_len) {
-		return -1;
-	}
-	for (i = 0; i < recipe->tags_len; i++) {
-		if (128 <= strlen(recipe->tags[i])) {
-			return -1;
-		}
+	for (U_TextList *curr = recipe->tags; curr; curr = curr->next) {
+		VALID_PTR(curr == NULL); VALID_PTR(curr->text == NULL); VALID_STR(curr->text, 128);
 	}
 
 	return 0;
@@ -770,19 +383,19 @@ static struct Recipe *recipe_from_json(char *s)
 	json_t *tags;
 
 	ingredients = json_object_get(root, "ingredients");
-	if (!json_is_array(ingredients) || json_array_size(ingredients) > ARRSIZE(recipe->ingredients)) {
+	if (!json_is_array(ingredients)) {
 		json_decref(root);
 		return NULL;
 	}
 
 	steps = json_object_get(root, "steps");
-	if (!json_is_array(steps) || json_array_size(steps) > ARRSIZE(recipe->steps)) {
+	if (!json_is_array(steps)) {
 		json_decref(root);
 		return NULL;
 	}
 
 	tags = json_object_get(root, "tags");
-	if (!json_is_array(tags) || json_array_size(tags) > ARRSIZE(recipe->tags)) {
+	if (!json_is_array(tags)) {
 		json_decref(root);
 		return NULL;
 	}
@@ -799,19 +412,16 @@ static struct Recipe *recipe_from_json(char *s)
 	recipe->prep_time = strdup(json_string_value(prep_time));
 	recipe->cook_time = strdup(json_string_value(cook_time));
 	recipe->servings = strdup(json_string_value(servings));
-	recipe->note = strdup_null((char *)json_string_value(note));
+	recipe->notes = strdup_null((char *)json_string_value(note));
 
 	for (i = 0; i < json_array_size(ingredients); i++) {
 		json_t *ingredient;
 		ingredient = json_array_get(ingredients, i);
 
-		// TODO (Brian): What the hell do we do if / when we get an array element that isn't a
-		// string? That's a thinker.
+		// TODO (Brian): check that this is actually a string value
 
-		recipe->ingredients[i] = strdup(json_string_value(ingredient));
+		u_textlist_append(&recipe->ingredients, strdup(json_string_value(ingredient)));
 	}
-
-	recipe->ingredients_len = i;
 
 	for (i = 0; i < json_array_size(steps); i++) {
 		json_t *step;
@@ -820,10 +430,8 @@ static struct Recipe *recipe_from_json(char *s)
 		// TODO (Brian): What the hell do we do if / when we get an array element that isn't a
 		// string? That's a thinker.
 
-		recipe->steps[i] = strdup(json_string_value(step));
+		u_textlist_append(&recipe->steps, strdup(json_string_value(step)));
 	}
-
-	recipe->steps_len = i;
 
 	for (i = 0; i < json_array_size(tags); i++) {
 		json_t *tag;
@@ -832,10 +440,8 @@ static struct Recipe *recipe_from_json(char *s)
 		// TODO (Brian): What the hell do we do if / when we get an array element that isn't a
 		// string? That's a thinker.
 
-		recipe->tags[i] = strdup(json_string_value(tag));
+		u_textlist_append(&recipe->tags, strdup(json_string_value(tag)));
 	}
-
-	recipe->tags_len = i;
 
 	json_decref(root);
 
@@ -851,34 +457,37 @@ static char *recipe_to_json(struct Recipe *recipe)
 	json_t *tags;
 	json_error_t error;
 	char *s;
-	size_t i;
+	size_t i, len;
 
 	// we have to setup the arrays of junk first
 
 	ingredients = json_array();
-	for (i = 0; i < recipe->ingredients_len; i++) {
-		json_array_append_new(ingredients, json_string(recipe->ingredients[i]));
+	for (i = 0, len = u_textlist_len(recipe->ingredients); i < len; i++) {
+		json_array_append_new(ingredients, json_string(u_textlist_get(recipe->ingredients, i)));
 	}
 
 	steps = json_array();
-	for (i = 0; i < recipe->steps_len; i++) {
-		json_array_append_new(steps, json_string(recipe->steps[i]));
+	for (i = 0, len = u_textlist_len(recipe->steps); i < len; i++) {
+		json_array_append_new(steps, json_string(u_textlist_get(recipe->steps, i)));
 	}
 
 	tags = json_array();
-	for (i = 0; i < recipe->tags_len; i++) {
-		json_array_append_new(tags, json_string(recipe->tags[i]));
+	for (i = 0, len = u_textlist_len(recipe->tags); i < len; i++) {
+		json_array_append_new(tags, json_string(u_textlist_get(recipe->tags, i)));
 	}
 
 	object = json_pack_ex(
 		&error, 0,
-		"{s:I, s:s, s:s, s:s, s:s, s:s?, s:o, s:o, s:o}",
-		"id", (json_int_t)recipe->id,
+		"{s:s, s:s, s:s, s:s, s:s, s:s, s:s, s:s, s:s?, s:o, s:o, s:o}",
+		"id", (json_int_t)recipe->metadata.id,
+		"create_ts", (json_int_t)recipe->metadata.create_ts,
+		"update_ts", (json_int_t)recipe->metadata.update_ts,
+		"delete_ts", (json_int_t)recipe->metadata.delete_ts,
 		"name", recipe->name,
 		"prep_time", recipe->prep_time,
 		"cook_time", recipe->cook_time,
 		"servings", recipe->servings,
-		"note", recipe->note,
+		"note", recipe->notes,
 		"ingredients", ingredients,
 		"steps", steps,
 		"tags", tags
@@ -888,40 +497,7 @@ static char *recipe_to_json(struct Recipe *recipe)
 		fprintf(stderr, "%s %d\n", error.text, error.position);
 	}
 
-	s = json_dumps(object, JSON_SORT_KEYS | JSON_COMPACT);
-
-	json_decref(object);
-
-	return s;
-}
-
-// search_results_to_json : converts the search records from memory to JSON
-char *search_results_to_json(struct RecipeResultRecords *records)
-{
-	size_t i;
-	json_t *array;
-	json_t *object;
-	char *s;
-
-	array = json_array();
-	for (i = 0; i < records->records_len; i++) {
-		object = json_object();
-
-		json_object_set_new(object, "id", json_integer(records->records[i].id));
-		json_object_set_new(object, "name", json_string(records->records[i].name));
-		json_object_set_new(object, "prep_time", json_string(records->records[i].prep_time));
-		json_object_set_new(object, "cook_time", json_string(records->records[i].cook_time));
-		json_object_set_new(object, "servings", json_string(records->records[i].servings));
-
-		json_array_append_new(array, object);
-	}
-
-	object = json_object();
-
-	json_object_set_new(object, "total", json_integer(records->matches));
-	json_object_set_new(object, "results", array);
-
-	s = json_dumps(object, JSON_SORT_KEYS | JSON_COMPACT);
+	s = json_dumps(object, JSON_SORT_KEYS|JSON_COMPACT);
 
 	json_decref(object);
 
@@ -933,38 +509,17 @@ void recipe_free(struct Recipe *recipe)
 {
 	size_t i;
 
-	// NOTE (Brian): this actually frees the in-memory, dynamic version of a recipe, not the
-	// version that's stored to disk
-
 	if (recipe) {
 		free(recipe->name);
 		free(recipe->prep_time);
 		free(recipe->cook_time);
 		free(recipe->servings);
-		free(recipe->note);
+		free(recipe->notes);
 
-		for (i = 0; i < ARRSIZE(recipe->ingredients) && recipe->ingredients[i]; i++) {
-			free(recipe->ingredients[i]);
-		}
-
-		for (i = 0; i < ARRSIZE(recipe->steps) && recipe->steps[i]; i++) {
-			free(recipe->steps[i]);
-		}
-
-		for (i = 0; i < ARRSIZE(recipe->tags) && recipe->tags[i]; i++) {
-			free(recipe->tags[i]);
-		}
+		u_textlist_free(recipe->ingredients);
+		u_textlist_free(recipe->steps);
+		u_textlist_free(recipe->tags);
 
 		free(recipe);
 	}
 }
-
-// search_results_free : frees the recipe result search records
-void search_results_free(struct RecipeResultRecords *records)
-{
-	assert(records != NULL);
-
-	free(records->records);
-	free(records);
-}
-

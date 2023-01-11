@@ -12,43 +12,41 @@
 
 #include "user.h"
 #include "objects.h"
-#include "store.h"
 
 #define COOKIE_KEY ("session")
 #define COOKIE_LEN (32)
 
 // newuser_verify : returns true if the new user record is valid
-int newuser_verify(struct NewUser *newuser);
+int newuser_verify(UI_NewUser *newuser);
 
 // newuser_from_json : converts a JSON string into a NewUser object
-struct NewUser *newuser_from_json(char *json);
+UI_NewUser *newuser_from_json(char *json);
 
 // user_from_session : takes the cookie, scans the user session table, returns user_id
 struct user_t *user_from_session(char *cookie);
 
 // newuser_add : adds the new user into the user table
-int newuser_add(struct NewUser *newuser);
+int newuser_add(UI_NewUser *newuser);
 
 // newuser_free : frees the new user 
-void newuser_free(struct NewUser *newuser);
+void newuser_free(UI_NewUser *newuser);
 
 // whoami_free : frees the strings and children, does not free this structure
-void whoami_free(struct WhoAmI *who);
+void whoami_free(UI_WhoAmI *who);
 
 // user_set_cookie : write the header to set the user cookie in 's'
-int user_set_cookie(char *s, user_id id, size_t len);
+int user_set_cookie(char *s, char *id, size_t len);
 
 // user_to_whoami : converts a user structure to a whoami structure
-struct WhoAmI *user_to_whoami(struct user_t *user);
+UI_WhoAmI *user_to_whoami(struct user_t *user);
 
 // whoami_to_json : converts a WhoAmI structure to a json blob
-char *whoami_to_json(struct WhoAmI *who);
+char *whoami_to_json(UI_WhoAmI *who);
 
 // user_api_newuser: endpoint, POST - /api/v1/newuser
 int user_api_newuser(struct mg_connection *conn, struct mg_http_message *hm)
 {
-	struct NewUser *user;
-	user_id id;
+	UI_NewUser *user;
 	char *json;
 	char cookie[BUFLARGE];
 
@@ -72,17 +70,20 @@ int user_api_newuser(struct mg_connection *conn, struct mg_http_message *hm)
 		return -1;
 	}
 
-	id = newuser_add(user);
-	if (id < 0) {
+	int rc = newuser_add(user);
+	if (rc < 0) {
 		ERR("couldn't save the user to the disk!\n");
 		newuser_free(user);
 		return -1;
 	}
 
 	// TODO (Brian): set the user cookie here to whatever's in the user session
+	// NOT IMPLEMENTED
+#if 0
 	user_set_cookie(cookie, id, sizeof cookie);
 
 	mg_http_reply(conn, 200, cookie, "{\"id\":%lld}", id);
+#endif
 
 	newuser_free(user);
 
@@ -104,7 +105,7 @@ int user_api_logout(struct mg_connection *conn, struct mg_http_message *hm)
 // user_api_whoami: endpoint, /api/v1/user/whoami
 int user_api_whoami(struct mg_connection *conn, struct mg_http_message *hm)
 {
-	struct WhoAmI *who;
+	UI_WhoAmI *who;
 	struct user_t *user;
 	struct mg_str *mg_cookie;
 	struct mg_str token;
@@ -143,50 +144,21 @@ int user_api_whoami(struct mg_connection *conn, struct mg_http_message *hm)
 }
 
 // user_to_whoami : converts a user structure to a whoami structure
-struct WhoAmI *user_to_whoami(struct user_t *user)
+UI_WhoAmI *user_to_whoami(struct user_t *user)
 {
-	struct WhoAmI *who;
-	string_128_t *string;
-
-	if (user == NULL) {
-		return NULL;
-	}
-
-	who = calloc(1, sizeof(*who));
-
-	who->id = user->base.id;
-
-	string = store_getobj(RT_STRING128, user->username);
-	who->username = strndup(string->string, sizeof(string->string));
-
-	string = store_getobj(RT_STRING128, user->email);
-	who->email = strndup(string->string, sizeof(string->string));
-
-	return who;
+	// NOT IMPLEMENTED (Brian)
+	return NULL;
 }
 
 // user_from_session : takes the cookie, scans the user session table, returns user_id
 struct user_t *user_from_session(char *cookie)
 {
-	size_t i;
-	struct user_t *user;
-	string_128_t *secret;
-
-	for (i = 1; i <= store_getlen(RT_USER); i++) {
-		if ((user = store_getobj(RT_USER, i)) != NULL) {
-			if (user->session_secret != 0 && (secret = store_getobj(RT_STRING128, user->session_secret)) != NULL) {
-				if (streq(cookie, secret->string)) {
-					return user;
-				}
-			}
-		}
-	}
-
+	// NOT IMPLEMENTED (Brian)
 	return NULL;
 }
 
 // newuser_verify : returns false if the newuser doesn't pass validation
-int newuser_verify(struct NewUser *newuser)
+int newuser_verify(UI_NewUser *newuser)
 {
 	// TODO (Brian)
 	//
@@ -215,8 +187,11 @@ int newuser_verify(struct NewUser *newuser)
 }
 
 // newuser_add : adds the new user into the user table
-int newuser_add(struct NewUser *newuser)
+int newuser_add(UI_NewUser *newuser)
 {
+	// NOT IMPLEMENTED
+	return -1;
+#if 0
 	user_t *user_record;
 	int rc;
 
@@ -302,11 +277,15 @@ int newuser_add(struct NewUser *newuser)
 		tbuf, COOKIE_LEN, sodium_base64_VARIANT_URLSAFE_NO_PADDING);
 
 	return user_record->base.id;
+#endif
 }
 
 // user_set_cookie : write the header to set the user cookie in 's'
-int user_set_cookie(char *s, user_id id, size_t len)
+int user_set_cookie(char *s, char *id, size_t len)
 {
+	// NOT IMPLEMENTED (Brian)
+	return -1;
+#if 0
 	user_t *user;
 	string_128_t *secret;
 	string_128_id secret_id;
@@ -324,12 +303,13 @@ int user_set_cookie(char *s, user_id id, size_t len)
 	}
 
 	return snprintf(s, len, "Set-Cookie: %s=%s; SameSite=Strict; HttpOnly\r\n", COOKIE_KEY, secret->string);
+#endif
 }
 
 // newuser_from_json : converts a JSON string into a NewUser object
-struct NewUser *newuser_from_json(char *s)
+UI_NewUser *newuser_from_json(char *s)
 {
-	struct NewUser *user;
+	UI_NewUser *user;
 	json_t *root;
 	json_error_t error;
 
@@ -389,7 +369,7 @@ struct NewUser *newuser_from_json(char *s)
 }
 
 // whoami_to_json : converts a WhoAmI structure to a json blob
-char *whoami_to_json(struct WhoAmI *who)
+char *whoami_to_json(UI_WhoAmI *who)
 {
 	json_t *object;
 	json_error_t error;
@@ -414,7 +394,7 @@ char *whoami_to_json(struct WhoAmI *who)
 }
 
 // newuser_free : frees the new user 
-void newuser_free(struct NewUser *newuser)
+void newuser_free(UI_NewUser *newuser)
 {
 	if (newuser) {
 		free(newuser->username);
@@ -426,7 +406,7 @@ void newuser_free(struct NewUser *newuser)
 }
 
 // login_free : frees the login 
-void login_free(struct Login *login)
+void login_free(UI_Login *login)
 {
 	if (login) {
 		free(login->username);
@@ -436,7 +416,7 @@ void login_free(struct Login *login)
 }
 
 // whoami_free : frees the strings and children, does not free this structure
-void whoami_free(struct WhoAmI *who)
+void whoami_free(UI_WhoAmI *who)
 {
 	if (who) {
 		free(who->username);
@@ -444,4 +424,3 @@ void whoami_free(struct WhoAmI *who)
 		free(who);
 	}
 }
-

@@ -125,6 +125,9 @@ char *ltrim(char *s);
 /* rtrim : removes whitespace on the "right" (end) of the string */
 char *rtrim(char *s);
 
+// trim: trims the string on both ends
+char *trim(char *s);
+
 /* mklower : makes the string lower cased */
 int mklower(char *s);
 
@@ -234,6 +237,12 @@ char *rtrim(char *s)
 		*e = 0;
 
 	return s;
+}
+
+// trim: trims the string on both ends
+char *trim(char *s)
+{
+	return rtrim(ltrim(s));
 }
 
 /* strnullcmp : compare strings, sorting null values as "first" */

@@ -2,42 +2,39 @@
 // 2021-06-08 20:04:01
 //
 // TODO (Brian)
-// - API
-//   - Login
-// - Session Cookies
-// - All Strings are in a HashMap
-// - Timing Regex (Frontend / Backend)
-//
-// - Image Upload
-//   - Recipes
-//   - User Profiles
-//
-// - User Settings Page
-//   - Password
-//   - Profile Picture
-//   - Email Change?
-//
-// - Email Verification
-//
-// - Forgot Password / Email Password Reset
-//
-// - Performance Tests
-//
-//   Full User Tests:
-//     - 1000 Users
-//     - Create
-//     - Login
-//
-// - Tags are a Dropdown
-//   I'm not sure how to actually make this look good on mobile.
-//
-// - Remove existing migration code, and remake migrations, one file each, so data structures can be
-//   redefined for each state of the database.
+// - convert to sqlite
+//     - recipe create
+//     - recipe read
+//     - recipe upate
+//     - recipe delete
+//     - recipe search with pagination
+// - prep_time / cook_time verification(?)
+// - performance tests
+//     - insert performance
+//     - get performance
+//     - search performance
+//     - delete performance
+// - ui
+//     - tags are a dropdown
+// - security
+//     - email verification
+//     - forgot password / email password reset
+// - image support
+//     - upload
+//     - profile picture / icon
+//     - retrieval via uri
+// - user support
+//     - email verification
+//     - forgot password / email password reset
+//     - settings page
+//         - password change
+//         - profile picture(?)
+//         - email change(?)
+// - cleanup
+//     - why do we have an RNG situation?
 
 #define COMMON_IMPLEMENTATION
 #include "common.h"
-
-#include "store.h"
 
 #include <unistd.h>
 #include <sys/types.h>
@@ -49,18 +46,20 @@
 #define MG_ENABLE_LOG 0
 #include "mongoose.h"
 
-#include "objects.h"
+#include "sqlite3.h"
+
 #include "ht.h"
 
+#include "objects.h"
+
 #include "recipe.h"
-#include "tag.h"
 #include "user.h"
 
 #define PORT (2000)
 
-// STATIC STUFF
-
 static magic_t MAGIC_COOKIE;
+
+sqlite3 *DATABASE;
 
 // init: initializes the program
 void init(char *fname);
@@ -91,8 +90,6 @@ int get_codepoint(char *s);
 // xctoi: converts a hex char (ascii) to the corresponding integer value
 int xctoi(char v);
 
-extern handle_t handle;
-
 #define USAGE ("USAGE: %s <dbname>\n")
 #define SCHEMA ("src/schema.sql")
 
@@ -117,8 +114,6 @@ int main(int argc, char **argv)
 
 	init(argv[1]);
 
-	store_write();
-
 	signal(SIGINT, handle_sigint);
 
 	// setup the routing hashtable
@@ -135,7 +130,7 @@ int main(int argc, char **argv)
 	ht_set(routes, "POST /api/v1/logout", (void *)user_api_logout);
 	ht_set(routes, "GET /api/v1/whoami", (void *)user_api_whoami);
 
-	ht_set(routes, "GET /api/v1/tags", (void *)tag_api_getlist);
+	// ht_set(routes, "GET /api/v1/tags", (void *)tag_api_getlist);
 
 	ht_set(routes, "GET /api/v1/static", (void *)send_file_static);
 	ht_set(routes, "GET /ui.js", (void *)send_file_uijs);
@@ -160,9 +155,9 @@ int main(int argc, char **argv)
 
 	mg_mgr_free(&mgr);
 
-	store_write();
-
 	ht_destroy(routes);
+
+    sqlite3_close(DATABASE);
 
 	return 0;
 }
@@ -335,6 +330,50 @@ int send_error(struct mg_connection *conn, int errcode)
 	return 0;
 }
 
+// setup_sqlite: sets up sqlite on the global handle (DATABASE)
+int setup_sqlite(char *fname)
+{
+	int rc;
+
+	rc = sqlite3_open(fname, &DATABASE);
+	if (rc != SQLITE_OK) {
+		ERR("sqlite3_open error: %s\n", sqlite3_errstr(rc));
+		return -1;
+	}
+
+    // read in the schema, and execute it (more involved than I'd like...)
+    {
+        size_t schema_len = 0;
+        char *schema = sys_readfile("./src/schema.sql", &schema_len);
+
+        for (char *sql = trim(schema), *next = NULL; sql && strlen(sql) > 0; sql = trim(next)) {
+            sqlite3_stmt *stmt = NULL;
+
+            rc = sqlite3_prepare_v2(DATABASE, sql, -1, &stmt, (const char **)&next);
+            if (rc != SQLITE_OK) {
+                ERR("SQL Error while bootstrapping database! %s\n", sqlite3_errstr(rc));
+                exit(1);
+            }
+
+            rc = sqlite3_step(stmt);
+            if (rc != SQLITE_DONE) {
+                printf("RC = %d\n", rc);
+                printf("SQL %ld\n%s\n", strlen(sql), sql);
+                ERR("SQL Execution failed while bootstrapping database! %s\n", sqlite3_errstr(rc));
+                exit(1);
+            }
+
+            sqlite3_finalize(stmt);
+        }
+
+        free(schema);
+    }
+
+    // TODO (Brian) execute migrations in the future
+
+	return 0;
+}
+
 // init : initializes the program
 void init(char *fname)
 {
@@ -361,10 +400,9 @@ void init(char *fname)
         exit(1);
     }
 
-	rc = store_open(fname);
+	rc = setup_sqlite(fname);
 	if (rc < 0) {
-		ERR("Couldn't initizlize the backing store!\n");
+		ERR("Couldn't initialize sqlite!\n");
 		exit(1);
 	}
 }
-

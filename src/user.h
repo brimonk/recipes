@@ -10,33 +10,30 @@
 // At no time, do we ever expose a "User" record to anyone. That's just absurd. You get a cookie,
 // and you can ping an endpoint to find out if you're logged in. That's it.
 
-// NewUser : the results of the "new user" form submission
-struct NewUser {
+typedef struct UI_NewUser {
     char *username;
     char *email;
     char *password;
     char *verify;
-};
+} UI_NewUser;
 
-// Login : the results of the Login Form
-struct Login {
+typedef struct UI_Login {
     char *username;
     char *password;
-};
+} UI_Login;
 
-// WhoAmI : the results of calling the /whoami endpoint
-struct WhoAmI { // gross
-	char *username;
-	char *email;
-	user_id id;
-};
+typedef struct UI_WhoAmI {
+    char *id;
+    char *username;
+    char *email;
+} UI_WhoAmI;
 
 // UserSession : this data gets concatenated with a ":", and base64 encoded, and stored in a cookie
 // This is what we use to determine if a user is who they say they are, and so on.
-struct UserSession {
-    user_id id;
+typedef struct UI_UserSession {
+    char *id;
     char *secret;
-};
+} UI_UserSession;
 
 // user_api_newuser: endpoint, /api/v1/user/create
 int user_api_newuser(struct mg_connection *conn, struct mg_http_message *hm);

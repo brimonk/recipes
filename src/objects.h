@@ -1,141 +1,60 @@
-#ifndef OBJECTS_H
-#define OBJECTS_H
-
-// Brian Chrzanowski
-// 2021-10-14 16:47:32
-//
-// This file just defines a bunch of structured items we keep in arrays, in memory, until we
-// need to flush them to disk, then we do.
+#ifndef OBJECTS_H_
+#define OBJECTS_H_
 
 #include "common.h"
 
-#define OBJECT_FLAG_USED           (0x0001)
-#define OBJECT_FLAG_LOCKED         (0x0002)
-#define OBJECT_FLAG_VERIFIED       (0x0004)
-#define OBJECT_FLAG_PUBLISHED      (0x0008)
-#define OBJECT_FLAG_RESET          (0x0010)
+// U_TextList: stores a list of strings
+typedef struct U_TextList {
+	struct U_TextList *next;
+	char *text;
+} U_TextList;
 
-typedef char string_char;
+// u_textlist_get: returns the text at index 'idx'
+char *u_textlist_get(U_TextList *list, int idx);
+// u_textlist_len: returns the length of the textlist
+int u_textlist_len(U_TextList *list);
+// u_textlist_append: appends 'text' to the 'list'
+int u_textlist_append(U_TextList **list, char *text);
+// u_textlist_free: releases the memory from a textlist
+void u_textlist_free(U_TextList *list);
 
-// objectbase_t : stores just the object's id, and some flags
-typedef struct objectbase_t {
-	u64 id;
-	u64 flags;
-} objectbase_t;
+// DB_Metadata: every table needs to implement a DB_Metadata as its first member
+typedef struct DB_Metadata {
+    int64_t rowid;
+    char *id;
+    char *create_ts;
+    char *update_ts;
+    char *delete_ts;
+} DB_Metadata;
 
-// string_128_t : a 128 char string
-typedef struct string_128_t {
-	objectbase_t base;
-	string_char string[128];
-} string_128_t;
+// DB_ChildTextRecord: represents a "child" text entry, a fixed schema for lists of strings
+typedef struct DB_ChildTextRecord {
+    int64_t rowid;
+    char *parent_id;
+    char *text;
+} DB_ChildTextRecord;
 
-typedef u64 string_128_id;
+// UI_SearchQuery: user input for performing search queries
+typedef struct UI_SearchQuery {
+	char *table;
+	char **columns;
+	char *search_field;
+	size_t page_size;
+	size_t page_number;
+	char *search;
+	char *sort_field;
+	char *sort_order;
+} UI_SearchQuery;
 
-// string_256_t : a 256 char string
-typedef struct string_256_t {
-	objectbase_t base;
-	string_char string[256];
-} string_256_t;
+// db_search_to_json: takes in a UI_SearchQuery object, returns a JSON schema, see func for details
+json_t *db_search_to_json(UI_SearchQuery *query);
+// db_load_metadata_from_rowid: fills out the metadata struct given the table and rowid
+int db_load_metadata_from_rowid(DB_Metadata *metadata, char *table, int64_t rowid);
 
-typedef u64 string_256_id;
-
-// user_t : user struct
-typedef struct user_t {
-	objectbase_t base;
-	string_128_id username;
-	string_128_id email;
-	string_128_id password;
-	string_128_id salt;
-    string_128_id session_secret;
-} user_t;
-
-typedef u64 user_id;
-
-// recipe_id : the pk for a recipe item (just a u64 that's the array offset)
-typedef s64 recipe_id;
-
-// ingredient_t : a single ingredient (it's just a double pointer)
-typedef struct ingredient_t {
-	objectbase_t base;
-	recipe_id recipe_id;
-	string_128_id string_id;
-} ingredient_t;
-
-typedef s64 ingredient_id;
-
-// step_t : a single step for a recipe
-typedef struct step_t {
-	objectbase_t base;
-	recipe_id recipe_id;
-	string_128_id string_id;
-} step_t;
-
-typedef s64 step_id;
-
-// tag_t : a single tag in the system (it's just a double pointer)
-typedef struct tag_t {
-	objectbase_t base;
-	recipe_id recipe_id;
-	string_128_id string_id;
-} tag_t;
-
-typedef s64 tag_id;
-
-// recipe_t : recipe struct
-typedef struct recipe_t {
-	objectbase_t base;
-
-	user_id user_id;
-
-	string_128_id name_id;
-
-    string_128_id prep_time_id;
-    string_128_id cook_time_id;
-    string_128_id servings_id;
-
-	string_256_id note_id;
-} recipe_t;
-
-#define OBJECT_MAGIC   ("Chrzanowski Recipe V1")
-
-#define OBJECT_INITIAL_VERSION (0x000001)
-
-#define DEFAULT_RECORD_CNT (32)
-
-typedef enum RECORD_TYPE {
-	RT_USER,
-	RT_RECIPE,
-	RT_STEP,
-	RT_INGREDIENT,
-	RT_TAG,
-	RT_STRING128,
-	RT_STRING256,
-	RT_TOTAL
-} RECORD_TYPE;
-
-typedef struct lump_t {
-	RECORD_TYPE type;
-	u64 start;      // starting byte from the base pointer
-	u64 recsize;    // size of each record, in bytes
-	u64 allocated;  // count of allocated records
-	u64 used;       // count of used records (highest index written)
-} lump_t;
-
-// storeheader_t : the header for the file
-typedef struct storeheader_t {
-	char magic[32];
-	u64 version;
-	u64 size;
-	lump_t lumps[RT_TOTAL];
-} storeheader_t;
-
-// NOTE (Brian): THIS DOES NOT GET STORED
-
-typedef struct handle_t {
-	storeheader_t header;
-	char *fname;
-	void *ptrs[RT_TOTAL];
-} handle_t;
+// UI_SearchResults: user input (result) for searches
+typedef struct UI_SearchResults {
+	size_t records;
+	void *data;
+} UI_SearchResults;
 
 #endif // OBJECTS_H
-

@@ -35,8 +35,5 @@ $(TARGET): $(OBJ)
 	$(CC) -fsanitize=address $(CFLAGS) -o $@ $^ -static-libasan $(LINKER)
 
 clean:
-	rm -f $(OBJ)
-	rm -f $(DEP)
-	rm -f $(TARGET)
-	rm -f html/ui.js
+	rm -f $(OBJ) $(DEP) $(TARGET) html/ui.js
 
