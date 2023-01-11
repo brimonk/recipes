@@ -104,7 +104,7 @@ json_t *db_search_to_json(UI_SearchQuery *query)
     }
 
     fprintf(stream, "select ");
-    for (char **i = &query->columns[0]; i; i++) {
+    for (char **i = &query->columns[0]; *i; i++) {
         fprintf(stream, "%s%s", i[0], i[1] == NULL ? " " : ", ");
 	}
 
