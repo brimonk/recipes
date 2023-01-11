@@ -9,7 +9,7 @@ DEP=$(SRC:.c=.d)
 
 JS=$(wildcard src/*.js)
 
-all: $(TARGET)
+all: $(TARGET) sqlite3_uuid.so
 
 watch: all
 	while [ true ] ; do \
@@ -34,6 +34,9 @@ run: all
 $(TARGET): $(OBJ)
 	$(CC) -fsanitize=address $(CFLAGS) -o $@ $^ -static-libasan $(LINKER)
 
+sqlite3_uuid.so: src/uuid.c
+	$(CC) $(CFLAGS) -fPIC -shared -o $@ $^
+
 clean:
-	rm -f $(OBJ) $(DEP) $(TARGET) html/ui.js
+	rm -f $(OBJ) $(DEP) $(TARGET) html/ui.js sqlite3_uuid.so
 

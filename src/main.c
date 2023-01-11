@@ -334,6 +334,7 @@ int send_error(struct mg_connection *conn, int errcode)
 // setup_sqlite: sets up sqlite on the global handle (DATABASE)
 int setup_sqlite(char *fname)
 {
+	char *errmsg;
 	int rc;
 
 	rc = sqlite3_open(fname, &DATABASE);
@@ -369,6 +370,19 @@ int setup_sqlite(char *fname)
 
         free(schema);
     }
+
+	// load our various extensions
+	{
+		sqlite3_enable_load_extension(DATABASE, true);
+
+		rc = sqlite3_load_extension(DATABASE, "./sqlite3_uuid", "sqlite3_uuid_init", &errmsg);
+		if (rc == SQLITE_ERROR) {
+			ERR("Error loading 'uuid' extension: %s\n", errmsg);
+			exit(1);
+		}
+
+		sqlite3_enable_load_extension(DATABASE, false);
+	}
 
     // TODO (Brian) execute migrations in the future
 

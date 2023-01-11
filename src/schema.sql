@@ -5,7 +5,7 @@
 
 -- users: table that stores all of our users
 create table if not exists users (
-    id             text not null
+    id             text not null default (uuid())
     , create_ts    text not null default (strftime('%Y%m%d-%H%M%f', 'now'))
     , update_ts    text null
     , delete_ts    text null
@@ -18,7 +18,7 @@ create table if not exists users (
 
 -- recipes: table to store our recipes
 create table if not exists recipes (
-    id             text not null
+    id             text not null default (uuid())
     , create_ts    text not null default (strftime('%Y%m%d-%H%M%f', 'now'))
     , update_ts    text null
     , delete_ts    text null
