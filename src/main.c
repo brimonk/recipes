@@ -3,11 +3,12 @@
 //
 // TODO (Brian)
 // - convert to sqlite
-//     - recipe create
-//     - recipe read
-//     - recipe upate
+//     - get uuid sqlite library (db will generate uuids for us)
+//     - recipe insert
+//     - recipe select
+//     - recipe update
 //     - recipe delete
-//     - recipe search with pagination
+//     - recipe search with pagination (should be done?)
 // - prep_time / cook_time verification(?)
 // - performance tests
 //     - insert performance
