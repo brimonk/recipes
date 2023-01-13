@@ -34,27 +34,34 @@ typedef struct DB_ChildTextRecord {
     char *text;
 } DB_ChildTextRecord;
 
+// DB_Query: currently used to abstract query responsibilities for "UI_SearchQuery"
+typedef struct DB_Query {
+    char *pk_column;
+    char **columns;
+    char *table;
+    char **where;
+	char **bind;
+    char *sort_field;
+    char *sort_order;
+} DB_Query;
+
 // UI_SearchQuery: user input for performing search queries
 typedef struct UI_SearchQuery {
-	char *table;
-	char **columns;
-	char *search_field;
-	size_t page_size;
-	size_t page_number;
-	char *search;
-	char *sort_field;
-	char *sort_order;
+    DB_Query search;
+    DB_Query results;
+    size_t page_size;
+    size_t page_number;
 } UI_SearchQuery;
 
 // db_search_to_json: takes in a UI_SearchQuery object, returns a JSON schema, see func for details
 json_t *db_search_to_json(UI_SearchQuery *query);
 // db_load_metadata_from_rowid: fills out the metadata struct given the table and rowid
 int db_load_metadata_from_rowid(DB_Metadata *metadata, char *table, int64_t rowid);
-
-// UI_SearchResults: user input (result) for searches
-typedef struct UI_SearchResults {
-	size_t records;
-	void *data;
-} UI_SearchResults;
+// db_load_metadata_from_id: fetches database metadata from the uuid 'id'
+int db_load_metadata_from_id(DB_Metadata *metadata, char *table, char *id);
+// db_insert_textlist: inserts the entire textlist as a single db transaction
+int db_insert_textlist(char *table, char *id, U_TextList *list);
+// db_get_textlist: fetches a textlist from the database with 'parent_id' as 'id'
+U_TextList *db_get_textlist(char *table, char *id);
 
 #endif // OBJECTS_H

@@ -62,7 +62,7 @@ static struct Recipe *recipe_from_json(char *s);
 static char *recipe_to_json(struct Recipe *recipe);
 
 // recipe_search : fills out a search structure with results
-json_t *recipe_search(struct UI_SearchQuery *query);
+json_t *recipe_search(char *query, size_t page_size, size_t page_number);
 
 // NOTE (Brian): I'm putting this here because I'm not sure where else it's really going to be used.
 // Feel free to move it in the future
@@ -190,34 +190,34 @@ int recipe_api_get(struct mg_connection *conn, struct mg_http_message *hm)
 // recipe_api_getlist : endpoint, GET - /api/v1/recipe/list
 int recipe_api_getlist(struct mg_connection *conn, struct mg_http_message *hm)
 {
+    char *query = NULL;
 	char tbuf[BUFSMALL];
+    size_t siz, num;
 	int rc;
 
-	char *columns[] = { "name", "prep_time", "cook_time", "servings", NULL };
-	struct UI_SearchQuery query = {
-		.table = "recipes",
-		.columns = columns,
-		.page_size = 20,
-		.page_number = 0,
-		.search = NULL
-	};
+    siz = 20;
+    num = 0;
 
 	rc = mg_http_get_var(&hm->query, "siz", tbuf, sizeof tbuf);
-	if (rc >= 0 && isdigit(tbuf[0])) { query.page_size = atol(tbuf); }
+	if (rc >= 0 && isdigit(tbuf[0])) { siz = atol(tbuf); }
 
 	rc = mg_http_get_var(&hm->query, "num", tbuf, sizeof tbuf);
-	if (rc >= 0 && isdigit(tbuf[0])) { query.page_number = atol(tbuf); }
+	if (rc >= 0 && isdigit(tbuf[0])) { num = atol(tbuf); }
 
 	rc = mg_http_get_var(&hm->query, "q", tbuf, sizeof tbuf);
-	if (rc >= 0 && isdigit(tbuf[0])) { query.search = tbuf; }
+	if (rc >= 0 && isdigit(tbuf[0])) { query = tbuf; }
 
-	json_t *json = recipe_search(&query);
+	json_t *json = recipe_search(query, siz, num);
+    if (json == NULL) {
+        ERR("search couldn't be performed!\n");
+    }
+
 	char *json_str = json_dumps(json, JSON_SORT_KEYS|JSON_COMPACT);
-	json_decref(json);
 
 	mg_http_reply(conn, 200, NULL, "%s", json);
 
 	free(json_str);
+	json_decref(json);
 
 	return 0;
 }
@@ -255,6 +255,8 @@ int recipe_insert(Recipe *recipe)
 	int64_t rowid;
 	int rc;
 
+    sqlite3_exec(DATABASE, "begin transaction;", NULL, NULL, NULL);
+
 	char *query =
 		"insert into recipes (name, prep_time, cook_time, servings, notes) values (?, ?, ?, ?, ?);";
 
@@ -263,16 +265,50 @@ int recipe_insert(Recipe *recipe)
 		return -1;
 	}
 
-	// TODO (Brian) finish insert
+    sqlite3_bind_text(stmt, 1, (const char *)recipe->name,      -1, NULL);
+    sqlite3_bind_text(stmt, 2, (const char *)recipe->prep_time, -1, NULL);
+    sqlite3_bind_text(stmt, 3, (const char *)recipe->cook_time, -1, NULL);
+    sqlite3_bind_text(stmt, 4, (const char *)recipe->servings,  -1, NULL);
+    sqlite3_bind_text(stmt, 5, (const char *)recipe->notes,     -1, NULL);
 
+    rc = sqlite3_step(stmt);
+
+    sqlite3_finalize(stmt);
+    stmt = NULL;
+
+    if (rc != SQLITE_DONE) { // deal with error
+        sqlite3_finalize(stmt);
+        return -1;
+    }
+
+    // get metadata so we can insert child tables
 	rowid = sqlite3_last_insert_rowid(DATABASE);
 
 	rc = db_load_metadata_from_rowid(&recipe->metadata, "recipes", rowid);
 	if (rc < 0) {
-		return -1; // ?
+        goto recipe_insert_fail;
 	}
 
+    rc = db_insert_textlist("ingredients", recipe->metadata.id, recipe->ingredients);
+    if (rc < 0) {
+        goto recipe_insert_fail;
+    }
+
+    db_insert_textlist("steps", recipe->metadata.id, recipe->steps);
+    if (rc < 0) { // ?
+        goto recipe_insert_fail;
+    }
+
+    db_insert_textlist("tags", recipe->metadata.id, recipe->tags);
+
+    sqlite3_exec(DATABASE, "commit transaction;", NULL, NULL, NULL);
+
 	return 0;
+
+recipe_insert_fail:
+    if (stmt != NULL) sqlite3_finalize(stmt);
+    sqlite3_exec(DATABASE, "rollback transaction;", NULL, NULL, NULL);
+    return -1;
 }
 
 // recipe_update: updates the recipe in the database
@@ -284,28 +320,92 @@ int recipe_update(Recipe *recipe)
 // recipe_get_by_id : fetches a recipe object from the store by id, and parses it
 struct Recipe *recipe_get_by_id(char *id)
 {
-	Recipe *recipe = NULL;
+	Recipe *recipe = calloc(1, sizeof(*recipe));
+    if (recipe == NULL) {
+        return NULL;
+    }
+
+    size_t query_sz;
+    char *query;
+    sqlite3_stmt *stmt;
+    int rc;
+
+    FILE *stream = open_memstream(&query, &query_sz);
+    fprintf(stream, "select name, prep_time, cook_time, servings, notes from recipes where id = ?;");
+    fclose(stream);
+
+    rc = sqlite3_prepare_v2(DATABASE, query, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        free(query);
+        return NULL;
+    }
+
+    sqlite3_bind_text(stmt, 1, id, -1, NULL);
+
+    if ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        recipe->name      = strdup_null((char *)sqlite3_column_text(stmt, 0));
+        recipe->prep_time = strdup_null((char *)sqlite3_column_text(stmt, 1));
+        recipe->cook_time = strdup_null((char *)sqlite3_column_text(stmt, 2));
+        recipe->servings  = strdup_null((char *)sqlite3_column_text(stmt, 3));
+        recipe->notes     = strdup_null((char *)sqlite3_column_text(stmt, 4));
+    }
+
+    sqlite3_finalize(stmt);
+
+    db_load_metadata_from_id(&recipe->metadata, "recipes", id);
+
+    recipe->ingredients = db_get_textlist("ingredients", recipe->metadata.id);
+    recipe->steps = db_get_textlist("ingredients", recipe->metadata.id);
+    recipe->tags = db_get_textlist("ingredients", recipe->metadata.id);
+
+    free(query);
+
 	return recipe;
 }
 
 // recipe_delete : updates 'deleted_ts' on the given recipe, such that it is 'deleted'
 int recipe_delete(char *id)
 {
-	// TODO (Brian) make me actually update the table
+	// TODO (Brian) update the delete_ts
 	return 0;
 }
 
 // recipe_search : fills out a search structure with results
-json_t *recipe_search(struct UI_SearchQuery *query)
+json_t *recipe_search(char *query, size_t page_size, size_t page_number)
 {
-	assert(query != NULL);
-	return db_search_to_json(query);
+    // TODO (Brian) finish updating the 
+    char *search_cols[] = { "id", "search_text", NULL };
+    char *where_clause[] = { "search_text", "like", "?", NULL };
+	char *search_bind_params[] = { COALESCE(query, ""), NULL };
+    DB_Query search = {
+        .pk_column = "id",
+        .columns = search_cols,
+        .table = "v_recipes",
+		.where = where_clause,
+		.bind = search_bind_params
+    };
+
+    char *results_cols[] = { "id", "name", "prep_time", "cook_time", "servings", NULL };
+    DB_Query results = {
+        .pk_column = "id",
+        .columns = results_cols,
+        .table = "ui_recipes",
+    };
+
+    UI_SearchQuery runme = {
+        .search = search,
+        .results = results,
+        .page_size = page_size,
+        .page_number = page_number
+    };
+
+	return db_search_to_json(&runme);
 }
 
 // recipe_validation : returns non-zero if the input object is invalid
 int recipe_validation(struct Recipe *recipe)
 {
-#define VALID_PTR(P_)     if ((P_)) { return -1; }
+#define VALID_PTR(P_)     if ((P_) == NULL) { return -1; }
 #define VALID_STR(S_, L_) if ((S_) == NULL || (L_) <= strlen(S_)) { return -1; }
 
 	VALID_PTR(recipe);
@@ -316,15 +416,15 @@ int recipe_validation(struct Recipe *recipe)
 	VALID_PTR(recipe->notes); VALID_STR(recipe->notes, 100);
 
 	for (U_TextList *curr = recipe->ingredients; curr; curr = curr->next) {
-		VALID_PTR(curr == NULL); VALID_PTR(curr->text == NULL); VALID_STR(curr->text, 128);
+		VALID_PTR(curr); VALID_PTR(curr->text); VALID_STR(curr->text, 128);
 	}
 
 	for (U_TextList *curr = recipe->steps; curr; curr = curr->next) {
-		VALID_PTR(curr == NULL); VALID_PTR(curr->text == NULL); VALID_STR(curr->text, 128);
+		VALID_PTR(curr); VALID_PTR(curr->text); VALID_STR(curr->text, 128);
 	}
 
 	for (U_TextList *curr = recipe->tags; curr; curr = curr->next) {
-		VALID_PTR(curr == NULL); VALID_PTR(curr->text == NULL); VALID_STR(curr->text, 128);
+		VALID_PTR(curr); VALID_PTR(curr->text); VALID_STR(curr->text, 128);
 	}
 
 	return 0;
@@ -507,8 +607,6 @@ static char *recipe_to_json(struct Recipe *recipe)
 // recipe_free : frees all of the data in the recipe object
 void recipe_free(struct Recipe *recipe)
 {
-	size_t i;
-
 	if (recipe) {
 		free(recipe->name);
 		free(recipe->prep_time);

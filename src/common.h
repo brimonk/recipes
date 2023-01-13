@@ -46,6 +46,8 @@
 
 #define ARRSIZE(x)   (sizeof((x))/sizeof((x)[0]))
 
+#define COALESCE(V1_, V2_) ((V1_) ? (V1_) : (V2_))
+
 // some fun macros for variadic functions :^)
 #define PP_ARG_N( \
           _1,  _2,  _3,  _4,  _5,  _6,  _7,  _8,  _9, _10, \

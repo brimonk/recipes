@@ -30,7 +30,7 @@ int u_textlist_append(U_TextList **list, char *text)
 	U_TextList *curr = NULL;
 
 	if (*list == NULL) {
-		*list = calloc(1, sizeof(*list));
+		*list = calloc(1, sizeof(**list));
 		if ((*list) == NULL)
 			return -1;
 
@@ -40,7 +40,7 @@ int u_textlist_append(U_TextList **list, char *text)
 		for (curr = *list; curr && curr->next; curr = curr->next)
 			;
 
-		curr->next = calloc(1, sizeof(*list));
+		curr->next = calloc(1, sizeof(**list));
 		if (curr->next == NULL)
 			return -1;
 
@@ -68,15 +68,23 @@ void u_textlist_free(U_TextList *list)
 // db_search_to_json: takes in a UI_SearchQuery object, and returns a JSON object with search results
 json_t *db_search_to_json(UI_SearchQuery *query)
 {
-	// NOTE (Brian)
+	// NOTE (Brian) (rewrite this, this is a mess)
 	//
-	// This function will return results with the following schema:
+	// The query that gets executed has the following form:
+	//
+	// select query.results.[columns] from query.results.table o
+	//   inner join (select query.search.[columns] from query.search.table where query.search.[where]) i
+	//     on o.[query.results.pk_column] = i.[query.search.pk_column]
+	//   (order by query.results.sort_field (query.results.sort_order))
+	//   (limit query.page_size offset (query.page_size * query.page_number));
+	//
+	// Once this query gets executed, it will return a JSON structure that looks like this:
 	//
 	// {
-	//     "results": [/* result rows as objects here */],
-	//     "total": int,
-	//     "page": int,
-	//     "size": int,
+	//   "total": (total results),
+	//   "page": (query.page_number),
+	//   "size": (query.page_size),
+	//   "results": [(each record has name of column from result set)]
 	// }
 
 #define RETURNNOW(V_) \
@@ -96,6 +104,7 @@ json_t *db_search_to_json(UI_SearchQuery *query)
     char **colvalus = NULL;
     char **colnames = NULL;
 
+    // TODO (Brian) check object before we build it
     assert(query != NULL);
 
     FILE *stream = open_memstream(&query_text, &query_sz);
@@ -104,29 +113,56 @@ json_t *db_search_to_json(UI_SearchQuery *query)
     }
 
     fprintf(stream, "select ");
-    for (char **i = &query->columns[0]; *i; i++) {
-        fprintf(stream, "%s%s", i[0], i[1] == NULL ? " " : ", ");
+    for (char **s = &query->results.columns[0]; *s; s++) {
+        fprintf(stream, "o.%s%s", s[0], s[1] == NULL ? " " : ", ");
 	}
 
-    fprintf(stream, "from %s where text contains ? order by %s %s limit %ld offset %ld",
-        query->table,
-        query->sort_field,
-        query->sort_order != NULL ? "" : query->sort_order,
-        query->page_size,
-        query->page_number * query->page_size
-    );
+    fprintf(stream, "from %s o ", query->results.table);
+	fprintf(stream, "inner join (");
+
+	fprintf(stream, "select ");
+	for (char **s = &query->search.columns[0]; *s; s++) {
+		fprintf(stream, "%s%s", s[0], s[1] == NULL ? " " : ", ");
+	}
+
+	fprintf(stream, "from %s ", query->search.table);
+
+	// NOTE (Brian) Currently the WHERE API has people adding in strings for their entire query.
+	// We probably want to make that not the case in the future. We should make a query builder
+	// or something.
+	fprintf(stream, "where ");
+	for (char **s = &query->search.where[0]; *s; s++) {
+		fprintf(stream, "%s ", s[0]);
+	}
+
+	fprintf(stream, ") i on o.%s = i.%s ", query->search.pk_column, query->results.pk_column);
+
+    if (query->results.sort_field) {
+        fprintf(stream, " order by %s %s",
+			query->results.sort_field, COALESCE(query->results.sort_order, ""));
+    }
+
+    fprintf(stream, " limit %ld offset %ld;",
+        query->page_size, query->page_number * query->page_size);
 
     fclose(stream);
 
     rc = sqlite3_prepare_v2(DATABASE, query_text, -1, &stmt, NULL);
     if (rc != SQLITE_OK) {
+		ERR("Query prepare error! %s\n", sqlite3_errmsg(DATABASE));
+		fprintf(stderr, "Query was:\n%s\n", query_text);
         RETURNNOW(NULL);
     }
 
-    rc = sqlite3_bind_text(stmt, 1, (const char *)query->search, -1, NULL);
-    if (rc != SQLITE_OK) {
-        RETURNNOW(NULL);
-    }
+	// NOTE (Brian) we probably want to bind more than strings at some point. But, it's just
+	// strings for now. It'd also probably be a good idea to check if the number of things in the
+	// bind array matches the number of '?' in the where clause.
+	for (int i = 0; query->search.bind[i]; i++) {
+		rc = sqlite3_bind_text(stmt, i + 1, (const char *)query->search.bind[i], -1, NULL);
+		if (rc != SQLITE_OK) {
+			RETURNNOW(NULL);
+		}
+	}
 
     json_t *json = json_object();
 
@@ -190,6 +226,11 @@ json_t *db_search_to_json(UI_SearchQuery *query)
 		json_array_append(json_object_get(json, "results"), elem);
     }
 
+	if (!(rc == SQLITE_OK || rc == SQLITE_DONE)) {
+		fprintf(stderr, "Query was:\n%s\n", query_text);
+		fprintf(stderr, "SQLITE ERROR: %s\n", sqlite3_errstr(rc));
+	}
+
     RETURNNOW(json);
 
 #undef RETURNING
@@ -198,13 +239,13 @@ json_t *db_search_to_json(UI_SearchQuery *query)
 // db_load_metadata_from_rowid: fills out the metadata struct given the table and rowid
 int db_load_metadata_from_rowid(DB_Metadata *metadata, char *table, int64_t rowid)
 {
-	char query[128] = {0};
+	char *query;
 	sqlite3_stmt *stmt = NULL;
 	int rc;
 
-	snprintf(query, sizeof query,
-		"select id, create_ts, update_ts, delete_ts from %s where rowid = ?;", table
-	);
+    FILE *stream = open_memstream(&query, NULL);
+	fprintf(stream, "select id, create_ts, update_ts, delete_ts from %s where rowid = ?;", table);
+    fclose(stream);
 
 	rc = sqlite3_prepare_v2(DATABASE, query, -1, &stmt, NULL);
 	if (rc != SQLITE_OK) { // TODO log error
@@ -223,7 +264,104 @@ int db_load_metadata_from_rowid(DB_Metadata *metadata, char *table, int64_t rowi
 	sqlite3_finalize(stmt);
 
 	return 0;
+}
 
+// db_load_metadata_from_id: fetches database metadata from the uuid 'id'
+int db_load_metadata_from_id(DB_Metadata *metadata, char *table, char *id)
+{
+	char *query;
+	sqlite3_stmt *stmt = NULL;
+	int rc;
+
+    FILE *stream = open_memstream(&query, NULL);
+    fprintf(stream, "select id, create_ts, update_ts, delete_ts from %s where id = ?;", id);
+    fclose(stream);
+
+	rc = sqlite3_prepare_v2(DATABASE, query, -1, &stmt, NULL);
+	if (rc != SQLITE_OK) { // TODO log error
+		return -1;
+	}
+
+	sqlite3_bind_text(stmt, 1, (const char *)id, -1, NULL);
+
+	if ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        metadata->id = strdup_null((char *)sqlite3_column_text(stmt, 0));
+        metadata->create_ts = strdup_null((char *)sqlite3_column_text(stmt, 1));
+        metadata->update_ts = strdup_null((char *)sqlite3_column_text(stmt, 2));
+        metadata->delete_ts = strdup_null((char *)sqlite3_column_text(stmt, 3));
+    }
+
+	sqlite3_finalize(stmt);
+
+    free(query);
+
+	return 0;
+}
+
+// db_insert_textlist: inserts the entire textlist as a single db transaction
+int db_insert_textlist(char *table, char *id, U_TextList *list)
+{
+    char *query;
+    size_t query_sz;
+    sqlite3_stmt *stmt;
+    int rc;
+
+    // TODO (Brian) handle errors in this OR THERE BE DRAGONS
+
+    FILE *stream = open_memstream(&query, &query_sz);
+    fprintf(stream, "insert into %s (parent_id, text) values (?, ?);", table);
+    fclose(stream);
+
+    rc = sqlite3_prepare_v2(DATABASE, query, -1, &stmt, NULL);
+	if (rc != SQLITE_OK) {
+		fprintf(stderr, "Query prepare error! %s\n", sqlite3_errstr(rc));
+		return -1;
+	}
+
+    sqlite3_bind_text(stmt, 1, (const char *)id, -1, NULL);
+
+    for (U_TextList *curr = list; curr; curr = curr->next) {
+        sqlite3_bind_text(stmt, 2, (const char *)curr->text, -1, NULL);
+        sqlite3_step(stmt);
+        sqlite3_reset(stmt);
+    }
+
+    sqlite3_finalize(stmt);
+    free(query);
+
+    return 0;
+}
+
+// db_get_textlist: fetches a textlist from the database with 'parent_id' as 'id'
+U_TextList *db_get_textlist(char *table, char *id)
+{
+    U_TextList *list = NULL;
+
+    char *query;
+    FILE *stream = open_memstream(&query, NULL);
+    fprintf(stream, "select parent_id, text from %s where parent_id = ?;", table);
+    fclose(stream);
+
+    sqlite3_stmt *stmt = NULL;
+    int rc;
+
+    rc = sqlite3_prepare_v2(DATABASE, query, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        free(query);
+        return NULL;
+    }
+
+    sqlite3_bind_text(stmt, 1, (const char *)id, -1, NULL);
+
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        u_textlist_append(&list, strdup((const char *)sqlite3_column_text(stmt, 1)));
+    }
+
+    sqlite3_finalize(stmt);
+
+    free(query);
+
+    return list;
 }
 
 // db_metadata_free: releases the members of 'metadata', but NOT 'metadata' itself

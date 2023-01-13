@@ -9,6 +9,7 @@
 //     - recipe update
 //     - recipe delete
 //     - recipe search with pagination (should be done?)
+//     - enforce ordering on textlist operations
 // - prep_time / cook_time verification(?)
 // - performance tests
 //     - insert performance
@@ -33,6 +34,7 @@
 //         - email change(?)
 // - cleanup
 //     - why do we have an RNG situation?
+// - navigation
 
 #define COMMON_IMPLEMENTATION
 #include "common.h"
