@@ -66,6 +66,8 @@ sqlite3 *DATABASE;
 
 // init: initializes the program
 void init(char *fname);
+// cleanup: cleans up everything from 'init'
+void cleanup();
 
 // event_handler : handles mongoose (web) events
 void event_handler(struct mg_connection *conn, int ev, void *ev_data, void *fn_data);
@@ -160,7 +162,7 @@ int main(int argc, char **argv)
 
 	ht_destroy(routes);
 
-    sqlite3_close(DATABASE);
+    cleanup();
 
 	return 0;
 }
@@ -422,4 +424,11 @@ void init(char *fname)
 		ERR("Couldn't initialize sqlite!\n");
 		exit(1);
 	}
+}
+
+// cleanup: cleans up everything from 'init'
+void cleanup()
+{
+    sqlite3_close(DATABASE);
+    magic_close(MAGIC_COOKIE);
 }
