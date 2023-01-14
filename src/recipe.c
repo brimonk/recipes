@@ -378,8 +378,8 @@ struct Recipe *recipe_get_by_id(char *id)
 	db_load_metadata_from_id(&recipe->metadata, "recipes", id);
 
 	recipe->ingredients = db_get_textlist("ingredients", recipe->metadata.id);
-	recipe->steps = db_get_textlist("ingredients", recipe->metadata.id);
-	recipe->tags = db_get_textlist("ingredients", recipe->metadata.id);
+	recipe->steps = db_get_textlist("steps", recipe->metadata.id);
+	recipe->tags = db_get_textlist("tags", recipe->metadata.id);
 
 	free(query);
 
