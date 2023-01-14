@@ -91,7 +91,9 @@ json_t *db_search_to_json(UI_SearchQuery *query)
     if (query_text) free(query_text); \
     if (stmt) sqlite3_finalize(stmt); \
     if (colvalus) free(colvalus); \
-    return V_;
+    if (colnames) free(colnames); \
+	if (json && (V_) == NULL) json_decref(json); \
+    return (V_);
 
     // used while preparing the query
     char *query_text = NULL;
@@ -103,6 +105,8 @@ json_t *db_search_to_json(UI_SearchQuery *query)
     int results_ncols = 0;
     char **colvalus = NULL;
     char **colnames = NULL;
+	json_t *json = NULL;
+	json_t *results = NULL;
 
     // TODO (Brian) check object before we build it
     assert(query != NULL);
@@ -164,12 +168,12 @@ json_t *db_search_to_json(UI_SearchQuery *query)
 		}
 	}
 
-    json_t *json = json_object();
+    json = json_object();
+	results = json_array();
 
     json_object_set_new(json, "total", json_integer(0));
     json_object_set_new(json, "page", json_integer(query->page_number));
     json_object_set_new(json, "size", json_integer(query->page_size));
-    json_object_set_new(json, "results", json_array());
 
     while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
         if (results_ncols == 0) {
@@ -223,8 +227,10 @@ json_t *db_search_to_json(UI_SearchQuery *query)
 			}
 		}
 
-		json_array_append(json_object_get(json, "results"), elem);
+		json_array_append_new(results, elem);
     }
+
+    json_object_set_new(json, "results", results);
 
 	if (!(rc == SQLITE_OK || rc == SQLITE_DONE)) {
 		fprintf(stderr, "Query was:\n%s\n", query_text);
@@ -240,10 +246,11 @@ json_t *db_search_to_json(UI_SearchQuery *query)
 int db_load_metadata_from_rowid(DB_Metadata *metadata, char *table, int64_t rowid)
 {
 	char *query;
+	size_t query_sz;
 	sqlite3_stmt *stmt = NULL;
 	int rc;
 
-    FILE *stream = open_memstream(&query, NULL);
+    FILE *stream = open_memstream(&query, &query_sz);
 	fprintf(stream, "select id, create_ts, update_ts, delete_ts from %s where rowid = ?;", table);
     fclose(stream);
 
@@ -262,6 +269,8 @@ int db_load_metadata_from_rowid(DB_Metadata *metadata, char *table, int64_t rowi
 	metadata->delete_ts = strdup_null((char *)sqlite3_column_text(stmt, 3));
 
 	sqlite3_finalize(stmt);
+
+	free(query);
 
 	return 0;
 }
@@ -306,10 +315,11 @@ int db_insert_textlist(char *table, char *id, U_TextList *list)
     sqlite3_stmt *stmt;
     int rc;
 
+	// TODO (Brian) put this into a transaction (so we can rollback)
     // TODO (Brian) handle errors in this OR THERE BE DRAGONS
 
     FILE *stream = open_memstream(&query, &query_sz);
-    fprintf(stream, "insert into %s (parent_id, text) values (?, ?);", table);
+    fprintf(stream, "insert into %s (parent_id, sorting, text) values (?, ?, ?);", table);
     fclose(stream);
 
     rc = sqlite3_prepare_v2(DATABASE, query, -1, &stmt, NULL);
@@ -320,8 +330,10 @@ int db_insert_textlist(char *table, char *id, U_TextList *list)
 
     sqlite3_bind_text(stmt, 1, (const char *)id, -1, NULL);
 
+	int64_t i = 0;
     for (U_TextList *curr = list; curr; curr = curr->next) {
-        sqlite3_bind_text(stmt, 2, (const char *)curr->text, -1, NULL);
+        sqlite3_bind_int64(stmt, 2, i++);
+        sqlite3_bind_text(stmt, 3, (const char *)curr->text, -1, NULL);
         sqlite3_step(stmt);
         sqlite3_reset(stmt);
     }

@@ -59,6 +59,8 @@ json_t *db_search_to_json(UI_SearchQuery *query);
 int db_load_metadata_from_rowid(DB_Metadata *metadata, char *table, int64_t rowid);
 // db_load_metadata_from_id: fetches database metadata from the uuid 'id'
 int db_load_metadata_from_id(DB_Metadata *metadata, char *table, char *id);
+// db_metadata_free: releases the members of 'metadata', but NOT 'metadata' itself
+void db_metadata_free(DB_Metadata *metadata);
 // db_insert_textlist: inserts the entire textlist as a single db transaction
 int db_insert_textlist(char *table, char *id, U_TextList *list);
 // db_get_textlist: fetches a textlist from the database with 'parent_id' as 'id'

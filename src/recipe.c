@@ -190,13 +190,13 @@ int recipe_api_get(struct mg_connection *conn, struct mg_http_message *hm)
 // recipe_api_getlist : endpoint, GET - /api/v1/recipe/list
 int recipe_api_getlist(struct mg_connection *conn, struct mg_http_message *hm)
 {
-    char *query = NULL;
+	char *query = NULL;
 	char tbuf[BUFSMALL];
-    size_t siz, num;
+	size_t siz, num;
 	int rc;
 
-    siz = 20;
-    num = 0;
+	siz = 20;
+	num = 0;
 
 	rc = mg_http_get_var(&hm->query, "siz", tbuf, sizeof tbuf);
 	if (rc >= 0 && isdigit(tbuf[0])) { siz = atol(tbuf); }
@@ -208,9 +208,9 @@ int recipe_api_getlist(struct mg_connection *conn, struct mg_http_message *hm)
 	if (rc >= 0 && isdigit(tbuf[0])) { query = tbuf; }
 
 	json_t *json = recipe_search(query, siz, num);
-    if (json == NULL) {
-        ERR("search couldn't be performed!\n");
-    }
+	if (json == NULL) {
+		ERR("search couldn't be performed!\n");
+	}
 
 	char *json_str = json_dumps(json, JSON_SORT_KEYS|JSON_COMPACT);
 
@@ -255,7 +255,7 @@ int recipe_insert(Recipe *recipe)
 	int64_t rowid;
 	int rc;
 
-    sqlite3_exec(DATABASE, "begin transaction;", NULL, NULL, NULL);
+	sqlite3_exec(DATABASE, "begin transaction;", NULL, NULL, NULL);
 
 	char *query =
 		"insert into recipes (name, prep_time, cook_time, servings, notes) values (?, ?, ?, ?, ?);";
@@ -265,50 +265,73 @@ int recipe_insert(Recipe *recipe)
 		return -1;
 	}
 
-    sqlite3_bind_text(stmt, 1, (const char *)recipe->name,      -1, NULL);
-    sqlite3_bind_text(stmt, 2, (const char *)recipe->prep_time, -1, NULL);
-    sqlite3_bind_text(stmt, 3, (const char *)recipe->cook_time, -1, NULL);
-    sqlite3_bind_text(stmt, 4, (const char *)recipe->servings,  -1, NULL);
-    sqlite3_bind_text(stmt, 5, (const char *)recipe->notes,     -1, NULL);
+	sqlite3_bind_text(stmt, 1, (const char *)recipe->name, -1, NULL);
 
-    rc = sqlite3_step(stmt);
+	if (recipe->prep_time) {
+		sqlite3_bind_text(stmt, 2, (const char *)recipe->prep_time, -1, NULL);
+	} else {
+		sqlite3_bind_null(stmt, 2);
+	}
 
-    sqlite3_finalize(stmt);
-    stmt = NULL;
+	if (recipe->cook_time) {
+		sqlite3_bind_text(stmt, 3, (const char *)recipe->cook_time, -1, NULL);
+	} else {
+		sqlite3_bind_null(stmt, 3);
+	}
 
-    if (rc != SQLITE_DONE) { // deal with error
-        sqlite3_finalize(stmt);
-        return -1;
-    }
+	if (recipe->servings) {
+		sqlite3_bind_text(stmt, 4, (const char *)recipe->servings, -1, NULL);
+	} else {
+		sqlite3_bind_null(stmt, 4);
+	}
 
-    // get metadata so we can insert child tables
+	if (recipe->notes) {
+		sqlite3_bind_text(stmt, 5, (const char *)recipe->notes, -1, NULL);
+	} else {
+		sqlite3_bind_null(stmt, 5);
+	}
+
+	rc = sqlite3_step(stmt);
+
+	sqlite3_finalize(stmt);
+	stmt = NULL;
+
+	if (rc != SQLITE_DONE) { // deal with error
+		sqlite3_finalize(stmt);
+		return -1;
+	}
+
+	// get metadata so we can insert child tables
 	rowid = sqlite3_last_insert_rowid(DATABASE);
 
 	rc = db_load_metadata_from_rowid(&recipe->metadata, "recipes", rowid);
 	if (rc < 0) {
-        goto recipe_insert_fail;
+		goto recipe_insert_fail;
 	}
 
-    rc = db_insert_textlist("ingredients", recipe->metadata.id, recipe->ingredients);
-    if (rc < 0) {
-        goto recipe_insert_fail;
-    }
+	rc = db_insert_textlist("ingredients", recipe->metadata.id, recipe->ingredients);
+	if (rc < 0) {
+		goto recipe_insert_fail;
+	}
 
-    db_insert_textlist("steps", recipe->metadata.id, recipe->steps);
-    if (rc < 0) { // ?
-        goto recipe_insert_fail;
-    }
+	rc = db_insert_textlist("steps", recipe->metadata.id, recipe->steps);
+	if (rc < 0) { // ?
+		goto recipe_insert_fail;
+	}
 
-    db_insert_textlist("tags", recipe->metadata.id, recipe->tags);
+	rc = db_insert_textlist("tags", recipe->metadata.id, recipe->tags);
+	if (rc < 0) { // ?
+		goto recipe_insert_fail;
+	}
 
-    sqlite3_exec(DATABASE, "commit transaction;", NULL, NULL, NULL);
+	sqlite3_exec(DATABASE, "commit transaction;", NULL, NULL, NULL);
 
 	return 0;
 
 recipe_insert_fail:
-    if (stmt != NULL) sqlite3_finalize(stmt);
-    sqlite3_exec(DATABASE, "rollback transaction;", NULL, NULL, NULL);
-    return -1;
+	if (stmt != NULL) sqlite3_finalize(stmt);
+	sqlite3_exec(DATABASE, "rollback transaction;", NULL, NULL, NULL);
+	return -1;
 }
 
 // recipe_update: updates the recipe in the database
@@ -321,44 +344,44 @@ int recipe_update(Recipe *recipe)
 struct Recipe *recipe_get_by_id(char *id)
 {
 	Recipe *recipe = calloc(1, sizeof(*recipe));
-    if (recipe == NULL) {
-        return NULL;
-    }
+	if (recipe == NULL) {
+		return NULL;
+	}
 
-    size_t query_sz;
-    char *query;
-    sqlite3_stmt *stmt;
-    int rc;
+	size_t query_sz;
+	char *query;
+	sqlite3_stmt *stmt;
+	int rc;
 
-    FILE *stream = open_memstream(&query, &query_sz);
-    fprintf(stream, "select name, prep_time, cook_time, servings, notes from recipes where id = ?;");
-    fclose(stream);
+	FILE *stream = open_memstream(&query, &query_sz);
+	fprintf(stream, "select name, prep_time, cook_time, servings, notes from recipes where id = ?;");
+	fclose(stream);
 
-    rc = sqlite3_prepare_v2(DATABASE, query, -1, &stmt, NULL);
-    if (rc != SQLITE_OK) {
-        free(query);
-        return NULL;
-    }
+	rc = sqlite3_prepare_v2(DATABASE, query, -1, &stmt, NULL);
+	if (rc != SQLITE_OK) {
+		free(query);
+		return NULL;
+	}
 
-    sqlite3_bind_text(stmt, 1, id, -1, NULL);
+	sqlite3_bind_text(stmt, 1, id, -1, NULL);
 
-    if ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
-        recipe->name      = strdup_null((char *)sqlite3_column_text(stmt, 0));
-        recipe->prep_time = strdup_null((char *)sqlite3_column_text(stmt, 1));
-        recipe->cook_time = strdup_null((char *)sqlite3_column_text(stmt, 2));
-        recipe->servings  = strdup_null((char *)sqlite3_column_text(stmt, 3));
-        recipe->notes     = strdup_null((char *)sqlite3_column_text(stmt, 4));
-    }
+	if ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+		recipe->name	  = strdup_null((char *)sqlite3_column_text(stmt, 0));
+		recipe->prep_time = strdup_null((char *)sqlite3_column_text(stmt, 1));
+		recipe->cook_time = strdup_null((char *)sqlite3_column_text(stmt, 2));
+		recipe->servings  = strdup_null((char *)sqlite3_column_text(stmt, 3));
+		recipe->notes	 = strdup_null((char *)sqlite3_column_text(stmt, 4));
+	}
 
-    sqlite3_finalize(stmt);
+	sqlite3_finalize(stmt);
 
-    db_load_metadata_from_id(&recipe->metadata, "recipes", id);
+	db_load_metadata_from_id(&recipe->metadata, "recipes", id);
 
-    recipe->ingredients = db_get_textlist("ingredients", recipe->metadata.id);
-    recipe->steps = db_get_textlist("ingredients", recipe->metadata.id);
-    recipe->tags = db_get_textlist("ingredients", recipe->metadata.id);
+	recipe->ingredients = db_get_textlist("ingredients", recipe->metadata.id);
+	recipe->steps = db_get_textlist("ingredients", recipe->metadata.id);
+	recipe->tags = db_get_textlist("ingredients", recipe->metadata.id);
 
-    free(query);
+	free(query);
 
 	return recipe;
 }
@@ -373,31 +396,31 @@ int recipe_delete(char *id)
 // recipe_search : fills out a search structure with results
 json_t *recipe_search(char *query, size_t page_size, size_t page_number)
 {
-    // TODO (Brian) finish updating the 
-    char *search_cols[] = { "id", "search_text", NULL };
-    char *where_clause[] = { "search_text", "like", "?", NULL };
-	char *search_bind_params[] = { COALESCE(query, ""), NULL };
-    DB_Query search = {
-        .pk_column = "id",
-        .columns = search_cols,
-        .table = "v_recipes",
+	// TODO (Brian) finish updating the 
+	char *search_cols[] = { "id", "search_text", NULL };
+	char *where_clause[] = { "search_text", "like", "?", NULL };
+	char *search_bind_params[] = { COALESCE(query, "%"), NULL };
+	DB_Query search = {
+		.pk_column = "id",
+		.columns = search_cols,
+		.table = "v_recipes",
 		.where = where_clause,
 		.bind = search_bind_params
-    };
+	};
 
-    char *results_cols[] = { "id", "name", "prep_time", "cook_time", "servings", NULL };
-    DB_Query results = {
-        .pk_column = "id",
-        .columns = results_cols,
-        .table = "ui_recipes",
-    };
+	char *results_cols[] = { "id", "name", "prep_time", "cook_time", "servings", NULL };
+	DB_Query results = {
+		.pk_column = "id",
+		.columns = results_cols,
+		.table = "ui_recipes",
+	};
 
-    UI_SearchQuery runme = {
-        .search = search,
-        .results = results,
-        .page_size = page_size,
-        .page_number = page_number
-    };
+	UI_SearchQuery runme = {
+		.search = search,
+		.results = results,
+		.page_size = page_size,
+		.page_number = page_number
+	};
 
 	return db_search_to_json(&runme);
 }
@@ -405,29 +428,7 @@ json_t *recipe_search(char *query, size_t page_size, size_t page_number)
 // recipe_validation : returns non-zero if the input object is invalid
 int recipe_validation(struct Recipe *recipe)
 {
-#define VALID_PTR(P_)     if ((P_) == NULL) { return -1; }
-#define VALID_STR(S_, L_) if ((S_) == NULL || (L_) <= strlen(S_)) { return -1; }
-
-	VALID_PTR(recipe);
-	VALID_PTR(recipe->name); VALID_STR(recipe->name, 100);
-	VALID_PTR(recipe->prep_time); VALID_STR(recipe->prep_time, 100);
-	VALID_PTR(recipe->cook_time); VALID_STR(recipe->cook_time, 100);
-	VALID_PTR(recipe->servings); VALID_STR(recipe->servings, 100);
-	VALID_PTR(recipe->notes); VALID_STR(recipe->notes, 100);
-
-	for (U_TextList *curr = recipe->ingredients; curr; curr = curr->next) {
-		VALID_PTR(curr); VALID_PTR(curr->text); VALID_STR(curr->text, 128);
-	}
-
-	for (U_TextList *curr = recipe->steps; curr; curr = curr->next) {
-		VALID_PTR(curr); VALID_PTR(curr->text); VALID_STR(curr->text, 128);
-	}
-
-	for (U_TextList *curr = recipe->tags; curr; curr = curr->next) {
-		VALID_PTR(curr); VALID_PTR(curr->text); VALID_STR(curr->text, 128);
-	}
-
-	return 0;
+	return recipe == NULL || recipe->name == NULL || 100 < strlen(recipe->name);
 }
 
 // recipe_from_json : converts a JSON string into a Recipe
@@ -438,8 +439,14 @@ static struct Recipe *recipe_from_json(char *s)
 	json_error_t error;
 	size_t i;
 
+	recipe = calloc(1, sizeof(*recipe));
+	if (recipe == NULL) {
+		return NULL;
+	}
+
 	root = json_loads(s, 0, &error);
 	if (root == NULL) {
+		free(recipe);
 		return NULL;
 	}
 
@@ -448,99 +455,63 @@ static struct Recipe *recipe_from_json(char *s)
 		return NULL;
 	}
 
-	json_t *name, *prep_time, *cook_time, *servings, *note;
-
-	// get all of the regular values first
-	name = json_object_get(root, "name");
-	if (!json_is_string(name)) {
+	// name is the only required recipe value, everything else is optional
+	json_t *name = json_object_get(root, "name");
+	if (json_is_string(name)) {
+		recipe->name = strdup(json_string_value(name));
+	} else {
 		json_decref(root);
+		free(recipe);
 		return NULL;
 	}
 
-	prep_time = json_object_get(root, "prep_time");
-	if (!json_is_string(prep_time)) {
-		json_decref(root);
-		return NULL;
+	// everything else, we can just check for the key, and if it's present and a string/array,
+	// just add it into the structure
+	json_t *prep_time = json_object_get(root, "prep_time");
+	if (json_is_string(prep_time)) {
+		recipe->prep_time = strdup(json_string_value(prep_time));
 	}
 
-	cook_time = json_object_get(root, "cook_time");
-	if (!json_is_string(cook_time)) {
-		json_decref(root);
-		return NULL;
+	json_t *cook_time = json_object_get(root, "cook_time");
+	if (json_is_string(cook_time)) {
+		recipe->cook_time = strdup(json_string_value(cook_time));
 	}
 
-	servings = json_object_get(root, "servings");
-	if (!json_is_string(servings)) {
-		json_decref(root);
-		return NULL;
+	json_t *servings = json_object_get(root, "servings");
+	if (json_is_string(servings)) {
+		recipe->servings = strdup(json_string_value(servings));
 	}
 
-	// NOTE (Brian): notes in a recipe should be optional.
-	note = json_object_get(root, "note");
-
-	json_t *ingredients;
-	json_t *steps;
-	json_t *tags;
-
-	ingredients = json_object_get(root, "ingredients");
-	if (!json_is_array(ingredients)) {
-		json_decref(root);
-		return NULL;
+	json_t *notes = json_object_get(root, "note");
+	if (json_is_string(notes)) {
+		recipe->notes = strdup(json_string_value(notes));
 	}
 
-	steps = json_object_get(root, "steps");
-	if (!json_is_array(steps)) {
-		json_decref(root);
-		return NULL;
+	json_t *ingredients = json_object_get(root, "ingredients");
+	if (json_is_array(ingredients)) {
+		for (i = 0; i < json_array_size(ingredients); i++) {
+			// TODO (Brian): check that this is actually a string value
+			json_t *ingredient = json_array_get(ingredients, i);
+			u_textlist_append(&recipe->ingredients, strdup(json_string_value(ingredient)));
+		}
 	}
 
-	tags = json_object_get(root, "tags");
-	if (!json_is_array(tags)) {
-		json_decref(root);
-		return NULL;
+	json_t *steps = json_object_get(root, "steps");
+	if (json_is_array(steps)) {
+		for (i = 0; i < json_array_size(steps); i++) {
+			// TODO (Brian): check that this is actually a string value
+			json_t *step = json_array_get(steps, i);
+			u_textlist_append(&recipe->steps, strdup(json_string_value(step)));
+		}
 	}
 
-	recipe = calloc(1, sizeof(*recipe));
-	if (recipe == NULL) {
-		json_decref(root);
-		return NULL;
-	}
-
-	// now that we have handles to all of the pieces of our recipe object, we should be
-	// able to take all of those, and get them into our regular C structure
-	recipe->name = strdup(json_string_value(name));
-	recipe->prep_time = strdup(json_string_value(prep_time));
-	recipe->cook_time = strdup(json_string_value(cook_time));
-	recipe->servings = strdup(json_string_value(servings));
-	recipe->notes = strdup_null((char *)json_string_value(note));
-
-	for (i = 0; i < json_array_size(ingredients); i++) {
-		json_t *ingredient;
-		ingredient = json_array_get(ingredients, i);
-
-		// TODO (Brian): check that this is actually a string value
-
-		u_textlist_append(&recipe->ingredients, strdup(json_string_value(ingredient)));
-	}
-
-	for (i = 0; i < json_array_size(steps); i++) {
-		json_t *step;
-		step = json_array_get(steps, i);
-
-		// TODO (Brian): What the hell do we do if / when we get an array element that isn't a
-		// string? That's a thinker.
-
-		u_textlist_append(&recipe->steps, strdup(json_string_value(step)));
-	}
-
-	for (i = 0; i < json_array_size(tags); i++) {
-		json_t *tag;
-		tag = json_array_get(tags, i);
-
-		// TODO (Brian): What the hell do we do if / when we get an array element that isn't a
-		// string? That's a thinker.
-
-		u_textlist_append(&recipe->tags, strdup(json_string_value(tag)));
+	json_t *tags = json_object_get(root, "tags");
+	if (json_is_array(tags)) {
+		for (i = 0; i < json_array_size(tags); i++) {
+			// TODO (Brian): check that this is actually a string value
+			json_t *tag = json_array_get(tags, i);
+			u_textlist_append(&recipe->tags, strdup(json_string_value(tag)));
+		}
 	}
 
 	json_decref(root);
@@ -608,6 +579,8 @@ static char *recipe_to_json(struct Recipe *recipe)
 void recipe_free(struct Recipe *recipe)
 {
 	if (recipe) {
+		db_metadata_free(&recipe->metadata);
+
 		free(recipe->name);
 		free(recipe->prep_time);
 		free(recipe->cook_time);
