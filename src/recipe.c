@@ -389,7 +389,26 @@ struct Recipe *recipe_get_by_id(char *id)
 // recipe_delete : updates 'deleted_ts' on the given recipe, such that it is 'deleted'
 int recipe_delete(char *id)
 {
-	// TODO (Brian) update the delete_ts
+	sqlite3_stmt *stmt;
+	int rc;
+	char *query = "update recipes set delete_ts = (strftime('%Y%m%d-%H%M%f', 'now')) where id = ?;";
+
+	// TODO (Brian) handle errors
+
+	rc = sqlite3_prepare_v2(DATABASE, query, -1, &stmt, NULL);
+	if (rc != SQLITE_OK) {
+	}
+
+	rc = sqlite3_bind_text(stmt, 1, id, -1, NULL);
+	if (rc != SQLITE_OK) {
+	}
+
+	rc = sqlite3_step(stmt);
+	if (rc != SQLITE_DONE) {
+	}
+
+	sqlite3_finalize(stmt);
+
 	return 0;
 }
 
