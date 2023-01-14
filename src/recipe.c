@@ -214,7 +214,7 @@ int recipe_api_getlist(struct mg_connection *conn, struct mg_http_message *hm)
 
 	char *json_str = json_dumps(json, JSON_SORT_KEYS|JSON_COMPACT);
 
-	mg_http_reply(conn, 200, NULL, "%s", json);
+	mg_http_reply(conn, 200, NULL, "%s", json_str);
 
 	free(json_str);
 	json_decref(json);
