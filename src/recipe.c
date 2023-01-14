@@ -176,6 +176,8 @@ int recipe_api_get(struct mg_connection *conn, struct mg_http_message *hm)
 	json = recipe_to_json(recipe);
 	if (json == NULL) {
 		ERR("couldn't convert the recipe to JSON\n");
+		free(json);
+		recipe_free(recipe);
 		return -1;
 	}
 
@@ -359,6 +361,7 @@ struct Recipe *recipe_get_by_id(char *id)
 
 	rc = sqlite3_prepare_v2(DATABASE, query, -1, &stmt, NULL);
 	if (rc != SQLITE_OK) {
+		ERR("%s\n", sqlite3_errmsg(DATABASE));
 		free(query);
 		return NULL;
 	}
@@ -568,11 +571,11 @@ static char *recipe_to_json(struct Recipe *recipe)
 
 	object = json_pack_ex(
 		&error, 0,
-		"{s:s, s:s, s:s, s:s, s:s, s:s, s:s, s:s, s:s?, s:o, s:o, s:o}",
-		"id", (json_int_t)recipe->metadata.id,
-		"create_ts", (json_int_t)recipe->metadata.create_ts,
-		"update_ts", (json_int_t)recipe->metadata.update_ts,
-		"delete_ts", (json_int_t)recipe->metadata.delete_ts,
+		"{s:s, s:s, s:s?, s:s?, s:s, s:s?, s:s?, s:s?, s:s?, s:o, s:o, s:o}",
+		"id", recipe->metadata.id,
+		"create_ts", recipe->metadata.create_ts,
+		"update_ts", recipe->metadata.update_ts,
+		"delete_ts", recipe->metadata.delete_ts,
 		"name", recipe->name,
 		"prep_time", recipe->prep_time,
 		"cook_time", recipe->cook_time,
@@ -581,7 +584,7 @@ static char *recipe_to_json(struct Recipe *recipe)
 		"ingredients", ingredients,
 		"steps", steps,
 		"tags", tags
-		);
+	);
 
 	if (object == NULL) {
 		fprintf(stderr, "%s %d\n", error.text, error.position);

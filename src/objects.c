@@ -279,11 +279,12 @@ int db_load_metadata_from_rowid(DB_Metadata *metadata, char *table, int64_t rowi
 int db_load_metadata_from_id(DB_Metadata *metadata, char *table, char *id)
 {
 	char *query;
+	size_t query_sz;
 	sqlite3_stmt *stmt = NULL;
 	int rc;
 
-    FILE *stream = open_memstream(&query, NULL);
-    fprintf(stream, "select id, create_ts, update_ts, delete_ts from %s where id = ?;", id);
+    FILE *stream = open_memstream(&query, &query_sz);
+    fprintf(stream, "select id, create_ts, update_ts, delete_ts from %s where id = ?;", table);
     fclose(stream);
 
 	rc = sqlite3_prepare_v2(DATABASE, query, -1, &stmt, NULL);
@@ -350,7 +351,8 @@ U_TextList *db_get_textlist(char *table, char *id)
     U_TextList *list = NULL;
 
     char *query;
-    FILE *stream = open_memstream(&query, NULL);
+	size_t query_sz;
+    FILE *stream = open_memstream(&query, &query_sz);
     fprintf(stream, "select parent_id, text from %s where parent_id = ?;", table);
     fclose(stream);
 
