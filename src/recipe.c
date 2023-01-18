@@ -339,7 +339,45 @@ recipe_insert_fail:
 // recipe_update: updates the recipe in the database
 int recipe_update(Recipe *recipe)
 {
-	return 0;
+	// NOTE (Brian) Deleting a recipe deletes all children tables (ingredients, steps, tags),
+	// updates the main table, then adds all of the new child text lists again.
+
+	int rc;
+
+	db_transaction_begin();
+
+	rc = db_delete_textlist("ingredients", recipe->metadata.id);
+	if (rc < 0) goto recipe_update_fail;
+	rc = db_delete_textlist("steps", recipe->metadata.id);
+	if (rc < 0) goto recipe_update_fail;
+	rc = db_delete_textlist("tags", recipe->metadata.id);
+	if (rc < 0) goto recipe_update_fail;
+
+	char *query = "update recipes set name = ?, prep_time = ?, cook_time = ?, servings = ?, notes = ? where id = ?;";
+
+	sqlite3_stmt *stmt;
+
+	rc = sqlite3_prepare_v2(DATABASE, query, -1, &stmt, NULL);
+	if (rc != SQLITE_OK) {
+		goto recipe_update_fail;
+	}
+
+	rc = db_insert_textlist("ingredients", recipe->metadata.id, recipe->ingredients);
+	if (rc < 0) goto recipe_update_fail;
+	rc = db_insert_textlist("steps", recipe->metadata.id, recipe->steps);
+	if (rc < 0) goto recipe_update_fail;
+	rc = db_insert_textlist("tags", recipe->metadata.id, recipe->tags);
+	if (rc < 0) goto recipe_update_fail;
+
+	db_transaction_commit();
+
+	rc = 0;
+
+recipe_update_fail:
+	if (rc) db_transaction_rollback();
+	if (stmt != NULL) sqlite3_finalize(stmt);
+	if (query != NULL) free(query);
+	return -1;
 }
 
 // recipe_get_by_id : fetches a recipe object from the store by id, and parses it

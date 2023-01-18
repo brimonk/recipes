@@ -378,6 +378,34 @@ U_TextList *db_get_textlist(char *table, char *id)
     return list;
 }
 
+// db_delete_textlist: deletes all of the textlists from the table with parent_id = id
+int db_delete_textlist(char *table, char *id)
+{
+	char *query;
+	size_t query_sz;
+
+	FILE *fp = open_memstream(&query, &query_sz);
+	fprintf(fp, "delete from %s where parent_id = ?;", table);
+	fclose(fp);
+
+	sqlite3_stmt *stmt;
+	int rc;
+
+	rc = sqlite3_prepare_v2(DATABASE, query, -1, &stmt, NULL);
+	if (rc != SQLITE_OK) {
+		free(query);
+		return -1;
+	}
+
+	sqlite3_bind_text(stmt, 1, id, -1, NULL);
+
+	rc = sqlite3_step(stmt);
+
+	sqlite3_finalize(stmt);
+
+	return rc == SQLITE_DONE ? 0 : -1;
+}
+
 // db_metadata_free: releases the members of 'metadata', but NOT 'metadata' itself
 void db_metadata_free(DB_Metadata *metadata)
 {
@@ -387,4 +415,22 @@ void db_metadata_free(DB_Metadata *metadata)
 		free(metadata->update_ts);
 		free(metadata->delete_ts);
 	}
+}
+
+// db_transaction_begin: begins a transaction on the database
+void db_transaction_begin()
+{
+	sqlite3_exec(DATABASE, "begin transaction;", NULL, NULL, NULL);
+}
+
+// db_transaction_commit: commits the currently open transaction
+void db_transaction_commit()
+{
+	sqlite3_exec(DATABASE, "commit transaction;", NULL, NULL, NULL);
+}
+
+// db_transaction_rollback: rolls the currently open transaction back
+void db_transaction_rollback()
+{
+	sqlite3_exec(DATABASE, "rollback transaction;", NULL, NULL, NULL);
 }

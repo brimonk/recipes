@@ -65,5 +65,14 @@ void db_metadata_free(DB_Metadata *metadata);
 int db_insert_textlist(char *table, char *id, U_TextList *list);
 // db_get_textlist: fetches a textlist from the database with 'parent_id' as 'id'
 U_TextList *db_get_textlist(char *table, char *id);
+// db_delete_textlist: deletes all of the textlists from the table with parent_id = id
+int db_delete_textlist(char *table, char *id);
+
+// db_transaction_begin: begins a transaction on the database
+void db_transaction_begin();
+// db_transaction_commit: commits the currently open transaction
+void db_transaction_commit();
+// db_transaction_rollback: rolls the currently open transaction back
+void db_transaction_rollback();
 
 #endif // OBJECTS_H

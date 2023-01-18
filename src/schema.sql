@@ -77,7 +77,7 @@ create view if not exists v_recipes
     (id, search_text) as
 select
     r.id as id, r.search_text || '|' || i.search_text || '|' || s.search_text || '|' || t.search_text as search_text
-from (select id, name || '|' || prep_time || '|' || cook_time || '|' || servings as search_text from recipes) as r
+from (select id, name || '|' || prep_time || '|' || cook_time || '|' || servings as search_text from recipes where delete_ts is null) as r
 join (
     select distinct parent_id, group_concat(text, '|') over (partition by parent_id) as search_text from ingredients
 ) i on r.id = i.parent_id
