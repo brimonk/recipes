@@ -55,6 +55,7 @@
 
 #include "recipe.h"
 #include "user.h"
+#include "tag.h"
 
 #define PORT (2000)
 
@@ -125,25 +126,24 @@ int main(int argc, char **argv)
 
 	// setup the routing hashtable
 
-	hmput(routes, "POST /api/v1/recipe", (void *)recipe_api_post);
-	hmput(routes, "GET /api/v1/recipe/list", (void *)recipe_api_getlist);
-	hmput(routes, "GET /api/v1/recipe/:id", (void *)recipe_api_get);
-	hmput(routes, "PUT /api/v1/recipe/:id", (void *)recipe_api_put);
-	hmput(routes, "DELETE /api/v1/recipe/:id", (void *)recipe_api_delete);
+	sh_new_strdup(routes);
 
-	hmput(routes, "POST /api/v1/newuser", (void *)user_api_newuser);
-	hmput(routes, "POST /api/v1/login", (void *)user_api_login);
-	hmput(routes, "POST /api/v1/logout", (void *)user_api_logout);
-	hmput(routes, "GET /api/v1/whoami", (void *)user_api_whoami);
+	shput(routes, "POST /api/v1/recipe", (void *)recipe_api_post);
+	shput(routes, "GET /api/v1/recipe/list", (void *)recipe_api_getlist);
+	shput(routes, "GET /api/v1/recipe/:id", (void *)recipe_api_get);
+	shput(routes, "PUT /api/v1/recipe/:id", (void *)recipe_api_put);
+	shput(routes, "DELETE /api/v1/recipe/:id", (void *)recipe_api_delete);
 
-	// ht_set(routes, "GET /api/v1/tags", (void *)tag_api_getlist);
+	shput(routes, "POST /api/v1/newuser", (void *)user_api_newuser);
+	shput(routes, "POST /api/v1/login", (void *)user_api_login);
+	shput(routes, "POST /api/v1/logout", (void *)user_api_logout);
+	shput(routes, "GET /api/v1/whoami", (void *)user_api_whoami);
 
-	hmput(routes, "GET /api/v1/static", (void *)send_file_static);
-	hmput(routes, "GET /ui.js", (void *)send_file_uijs);
-	hmput(routes, "GET /mithril.js", (void *)send_file_mithriljs);
-	hmput(routes, "GET /styles.css", (void *)send_file_styles);
-	hmput(routes, "GET /index.html", (void *)send_file_index);
-	hmput(routes, "GET /", (void *)send_file_index);
+	shput(routes, "GET /api/v1/tags", (void *)tag_api_getlist);
+
+    for (size_t i = 0; i < hmlen(routes); i++) {
+        printf("K: '%s', V: %p\n", routes[i].key, routes[i].value);
+    }
 
 	mg_mgr_init(&mgr);
 
@@ -161,7 +161,7 @@ int main(int argc, char **argv)
 
 	mg_mgr_free(&mgr);
 
-	hmfree(routes);
+	shfree(routes);
 
     cleanup();
 
@@ -257,11 +257,13 @@ void request_handler(struct mg_connection *conn, struct mg_http_message *hm)
 
 	printf("%s\n", buf);
 
-	if ((route_index = hmgeti(routes, buf)) >= 0) {
+	if (shgeti(routes, buf) >= 0) {
 		func = routes[route_index].value;
+        printf("FUNCTION POINTER: %p\n", func);
 		rc = func(conn, hm);
 		CHKERR(503);
 	} else {
+        printf("FUNCTION POINTER NOT FOUND\n");
 		struct mg_http_serve_opts opts = { .root_dir = "./html" };
 		mg_http_serve_dir(conn, hm, &opts);
 	}
