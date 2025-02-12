@@ -3,21 +3,6 @@
 
 #include "common.h"
 
-// U_TextList: stores a list of strings
-typedef struct U_TextList {
-	struct U_TextList *next;
-	char *text;
-} U_TextList;
-
-// u_textlist_get: returns the text at index 'idx'
-char *u_textlist_get(U_TextList *list, int idx);
-// u_textlist_len: returns the length of the textlist
-int u_textlist_len(U_TextList *list);
-// u_textlist_append: appends 'text' to the 'list'
-int u_textlist_append(U_TextList **list, char *text);
-// u_textlist_free: releases the memory from a textlist
-void u_textlist_free(U_TextList *list);
-
 // DB_Metadata: every table needs to implement a DB_Metadata as its first member
 typedef struct DB_Metadata {
     int64_t rowid;
@@ -62,9 +47,9 @@ int db_load_metadata_from_id(DB_Metadata *metadata, char *table, char *id);
 // db_metadata_free: releases the members of 'metadata', but NOT 'metadata' itself
 void db_metadata_free(DB_Metadata *metadata);
 // db_insert_textlist: inserts the entire textlist as a single db transaction
-int db_insert_textlist(char *table, char *id, U_TextList *list);
+int db_insert_textlist(char *table, char *id, char **list);
 // db_get_textlist: fetches a textlist from the database with 'parent_id' as 'id'
-U_TextList *db_get_textlist(char *table, char *id);
+char **db_get_textlist(char *table, char *id);
 // db_delete_textlist: deletes all of the textlists from the table with parent_id = id
 int db_delete_textlist(char *table, char *id);
 

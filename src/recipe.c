@@ -552,7 +552,7 @@ static struct Recipe *recipe_from_json(char *s)
 		for (i = 0; i < json_array_size(ingredients); i++) {
 			// TODO (Brian): check that this is actually a string value
 			json_t *ingredient = json_array_get(ingredients, i);
-			u_textlist_append(&recipe->ingredients, strdup(json_string_value(ingredient)));
+			arrput(recipe->ingredients, strdup(json_string_value(ingredient)));
 		}
 	}
 
@@ -561,7 +561,7 @@ static struct Recipe *recipe_from_json(char *s)
 		for (i = 0; i < json_array_size(steps); i++) {
 			// TODO (Brian): check that this is actually a string value
 			json_t *step = json_array_get(steps, i);
-			u_textlist_append(&recipe->steps, strdup(json_string_value(step)));
+			arrput(recipe->steps, strdup(json_string_value(step)));
 		}
 	}
 
@@ -570,7 +570,7 @@ static struct Recipe *recipe_from_json(char *s)
 		for (i = 0; i < json_array_size(tags); i++) {
 			// TODO (Brian): check that this is actually a string value
 			json_t *tag = json_array_get(tags, i);
-			u_textlist_append(&recipe->tags, strdup(json_string_value(tag)));
+			arrput(recipe->tags, strdup(json_string_value(tag)));
 		}
 	}
 
@@ -593,18 +593,18 @@ static char *recipe_to_json(struct Recipe *recipe)
 	// we have to setup the arrays of junk first
 
 	ingredients = json_array();
-	for (i = 0, len = u_textlist_len(recipe->ingredients); i < len; i++) {
-		json_array_append_new(ingredients, json_string(u_textlist_get(recipe->ingredients, i)));
+	for (i = 0, len = arrlen(recipe->ingredients); i < len; i++) {
+		json_array_append_new(ingredients, json_string(recipe->ingredients[i]));
 	}
 
 	steps = json_array();
-	for (i = 0, len = u_textlist_len(recipe->steps); i < len; i++) {
-		json_array_append_new(steps, json_string(u_textlist_get(recipe->steps, i)));
+	for (i = 0, len = arrlen(recipe->steps); i < len; i++) {
+		json_array_append_new(steps, json_string(recipe->steps[i]));
 	}
 
 	tags = json_array();
-	for (i = 0, len = u_textlist_len(recipe->tags); i < len; i++) {
-		json_array_append_new(tags, json_string(u_textlist_get(recipe->tags, i)));
+	for (i = 0, len = arrlen(recipe->tags); i < len; i++) {
+		json_array_append_new(tags, json_string(recipe->tags[i]));
 	}
 
 	object = json_pack_ex(
@@ -647,9 +647,9 @@ void recipe_free(struct Recipe *recipe)
 		free(recipe->servings);
 		free(recipe->notes);
 
-		u_textlist_free(recipe->ingredients);
-		u_textlist_free(recipe->steps);
-		u_textlist_free(recipe->tags);
+		arrfree(recipe->ingredients);
+		arrfree(recipe->steps);
+		arrfree(recipe->tags);
 
 		free(recipe);
 	}

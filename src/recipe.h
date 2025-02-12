@@ -6,10 +6,6 @@
 
 #include "mongoose.h"
 
-typedef struct DB_ChildTextRecord C_Ingredients;
-typedef struct DB_ChildTextRecord C_Steps;
-typedef struct DB_ChildTextRecord C_Tags;
-
 // Recipe: the recipe structure
 typedef struct Recipe {
 	DB_Metadata metadata;
@@ -22,9 +18,9 @@ typedef struct Recipe {
     char *notes;
 
 	// child tables
-	U_TextList *ingredients;
-	U_TextList *steps;
-	U_TextList *tags;
+	char **ingredients;
+	char **steps;
+	char **tags;
 } Recipe;
 
 // V_Recipe: the recipe search view

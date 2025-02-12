@@ -7,61 +7,6 @@
 
 extern sqlite3 *DATABASE;
 
-// u_textlist_get: returns the text at index 'idx'
-char *u_textlist_get(U_TextList *list, int idx)
-{
-	for (int i = 0; i < idx && list; i++)
-		list = list->next;
-	return list ? list->text : NULL;
-}
-
-// u_textlist_len: returns the length of the textlist
-int u_textlist_len(U_TextList *list)
-{
-	int len = 0;
-	for (; list; list = list->next)
-		len++;
-	return len;
-}
-
-// u_textlist_append: appends 'text' to the 'list'
-int u_textlist_append(U_TextList **list, char *text)
-{
-	U_TextList *curr = NULL;
-
-	if (*list == NULL) {
-		*list = calloc(1, sizeof(**list));
-		if ((*list) == NULL)
-			return -1;
-
-		(*list)->next = NULL;
-		(*list)->text = text;
-	} else {
-		for (curr = *list; curr && curr->next; curr = curr->next)
-			;
-
-		curr->next = calloc(1, sizeof(**list));
-		if (curr->next == NULL)
-			return -1;
-
-		curr->next->next = NULL;
-		curr->next->text = text;
-	}
-
-	return 0;
-}
-
-// u_textlist_free: releases the memory from a textlist
-void u_textlist_free(U_TextList *list)
-{
-    while (list) {
-        U_TextList *curr = list;
-        list = list->next;
-        free(curr->text);
-        free(curr);
-    }
-}
-
 // this is a really bad spot for this function, but I'm not sure where else it should go
 // maybe in a file called 'search.c'
 
@@ -309,7 +254,7 @@ int db_load_metadata_from_id(DB_Metadata *metadata, char *table, char *id)
 }
 
 // db_insert_textlist: inserts the entire textlist as a single db transaction
-int db_insert_textlist(char *table, char *id, U_TextList *list)
+int db_insert_textlist(char *table, char *id, char **list)
 {
     char *query;
     size_t query_sz;
@@ -331,13 +276,12 @@ int db_insert_textlist(char *table, char *id, U_TextList *list)
 
     sqlite3_bind_text(stmt, 1, (const char *)id, -1, NULL);
 
-	int64_t i = 0;
-    for (U_TextList *curr = list; curr; curr = curr->next) {
-        sqlite3_bind_int64(stmt, 2, i++);
-        sqlite3_bind_text(stmt, 3, (const char *)curr->text, -1, NULL);
+	for (size_t i = 0; i < arrlen(list); i++) {
+        sqlite3_bind_int64(stmt, 2, i);
+        sqlite3_bind_text(stmt, 3, list[i], -1, NULL);
         sqlite3_step(stmt);
         sqlite3_reset(stmt);
-    }
+	}
 
     sqlite3_finalize(stmt);
     free(query);
@@ -346,9 +290,9 @@ int db_insert_textlist(char *table, char *id, U_TextList *list)
 }
 
 // db_get_textlist: fetches a textlist from the database with 'parent_id' as 'id'
-U_TextList *db_get_textlist(char *table, char *id)
+char **db_get_textlist(char *table, char *id)
 {
-    U_TextList *list = NULL;
+    char **list = NULL;
 
     char *query;
 	size_t query_sz;
@@ -368,7 +312,7 @@ U_TextList *db_get_textlist(char *table, char *id)
     sqlite3_bind_text(stmt, 1, (const char *)id, -1, NULL);
 
     while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
-        u_textlist_append(&list, strdup((const char *)sqlite3_column_text(stmt, 1)));
+		arrput(list, strdup((const char *)sqlite3_column_text(stmt, 1)));
     }
 
     sqlite3_finalize(stmt);
