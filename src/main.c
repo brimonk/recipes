@@ -257,7 +257,7 @@ void request_handler(struct mg_connection *conn, struct mg_http_message *hm)
 
 	printf("%s\n", buf);
 
-	if (shgeti(routes, buf) >= 0) {
+	if ((route_index = shgeti(routes, buf)) >= 0) {
 		func = routes[route_index].value;
         printf("FUNCTION POINTER: %p\n", func);
 		rc = func(conn, hm);
