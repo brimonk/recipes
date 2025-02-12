@@ -274,9 +274,8 @@ int db_insert_textlist(char *table, char *id, char **list)
 		return -1;
 	}
 
-    sqlite3_bind_text(stmt, 1, (const char *)id, -1, NULL);
-
 	for (size_t i = 0; i < arrlen(list); i++) {
+		sqlite3_bind_text(stmt, 1, (const char *)id, -1, NULL);
         sqlite3_bind_int64(stmt, 2, i);
         sqlite3_bind_text(stmt, 3, list[i], -1, NULL);
         sqlite3_step(stmt);

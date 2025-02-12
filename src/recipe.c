@@ -300,6 +300,7 @@ int recipe_insert(Recipe *recipe)
 
 	if (rc != SQLITE_DONE) { // deal with error
 		sqlite3_finalize(stmt);
+		ERR("error inserting recipe record! %s", sqlite3_errstr(rc));
 		return -1;
 	}
 
@@ -647,8 +648,14 @@ void recipe_free(struct Recipe *recipe)
 		free(recipe->servings);
 		free(recipe->notes);
 
+		for (size_t i = 0; i < arrlen(recipe->ingredients); i++)
+			free(recipe->ingredients[i]);
 		arrfree(recipe->ingredients);
+		for (size_t i = 0; i < arrlen(recipe->steps); i++)
+			free(recipe->steps[i]);
 		arrfree(recipe->steps);
+		for (size_t i = 0; i < arrlen(recipe->tags); i++)
+			free(recipe->tags[i]);
 		arrfree(recipe->tags);
 
 		free(recipe);
