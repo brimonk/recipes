@@ -262,7 +262,8 @@ void request_handler(struct mg_connection *conn, struct mg_http_message *hm)
 		rc = func(conn, hm);
 		CHKERR(503);
 	} else {
-        SNDERR(404);
+		struct mg_http_serve_opts opts = { .root_dir = "./html" };
+		mg_http_serve_dir(conn, hm, &opts);
 	}
 }
 
