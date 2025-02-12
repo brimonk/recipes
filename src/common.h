@@ -632,6 +632,9 @@ void pcg_seed(struct pcgrand_t *rng, u64 initstate, u64 initseq)
     pcg_rand(rng);
 }
 
+#define STB_DS_IMPLEMENTATION
 #endif // COMMON_IMPLEMENTATION
+
+#include "stb_ds.h"
 
 #endif // COMMON_H

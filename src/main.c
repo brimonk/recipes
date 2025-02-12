@@ -51,8 +51,6 @@
 
 #include "sqlite3.h"
 
-#include "ht.h"
-
 #include "objects.h"
 
 #include "recipe.h"
@@ -100,7 +98,11 @@ int xctoi(char v);
 
 int running;
 
-struct ht *routes;
+typedef struct RouteTableEntry {
+	char *key;
+	int (*value)(struct mg_connection *, struct mg_http_message *);
+} RouteTableEntry;
+RouteTableEntry *routes = NULL;
 
 // handle_sigint: handles SIGINT so we can write to the database
 void handle_sigint(int sig)
@@ -122,27 +124,26 @@ int main(int argc, char **argv)
 	signal(SIGINT, handle_sigint);
 
 	// setup the routing hashtable
-	routes = ht_create();
 
-	ht_set(routes, "POST /api/v1/recipe", (void *)recipe_api_post);
-	ht_set(routes, "GET /api/v1/recipe/list", (void *)recipe_api_getlist);
-	ht_set(routes, "GET /api/v1/recipe/:id", (void *)recipe_api_get);
-	ht_set(routes, "PUT /api/v1/recipe/:id", (void *)recipe_api_put);
-	ht_set(routes, "DELETE /api/v1/recipe/:id", (void *)recipe_api_delete);
+	hmput(routes, "POST /api/v1/recipe", (void *)recipe_api_post);
+	hmput(routes, "GET /api/v1/recipe/list", (void *)recipe_api_getlist);
+	hmput(routes, "GET /api/v1/recipe/:id", (void *)recipe_api_get);
+	hmput(routes, "PUT /api/v1/recipe/:id", (void *)recipe_api_put);
+	hmput(routes, "DELETE /api/v1/recipe/:id", (void *)recipe_api_delete);
 
-	ht_set(routes, "POST /api/v1/newuser", (void *)user_api_newuser);
-	ht_set(routes, "POST /api/v1/login", (void *)user_api_login);
-	ht_set(routes, "POST /api/v1/logout", (void *)user_api_logout);
-	ht_set(routes, "GET /api/v1/whoami", (void *)user_api_whoami);
+	hmput(routes, "POST /api/v1/newuser", (void *)user_api_newuser);
+	hmput(routes, "POST /api/v1/login", (void *)user_api_login);
+	hmput(routes, "POST /api/v1/logout", (void *)user_api_logout);
+	hmput(routes, "GET /api/v1/whoami", (void *)user_api_whoami);
 
 	// ht_set(routes, "GET /api/v1/tags", (void *)tag_api_getlist);
 
-	ht_set(routes, "GET /api/v1/static", (void *)send_file_static);
-	ht_set(routes, "GET /ui.js", (void *)send_file_uijs);
-	ht_set(routes, "GET /mithril.js", (void *)send_file_mithriljs);
-	ht_set(routes, "GET /styles.css", (void *)send_file_styles);
-	ht_set(routes, "GET /index.html", (void *)send_file_index);
-	ht_set(routes, "GET /", (void *)send_file_index);
+	hmput(routes, "GET /api/v1/static", (void *)send_file_static);
+	hmput(routes, "GET /ui.js", (void *)send_file_uijs);
+	hmput(routes, "GET /mithril.js", (void *)send_file_mithriljs);
+	hmput(routes, "GET /styles.css", (void *)send_file_styles);
+	hmput(routes, "GET /index.html", (void *)send_file_index);
+	hmput(routes, "GET /", (void *)send_file_index);
 
 	mg_mgr_init(&mgr);
 
@@ -160,7 +161,7 @@ int main(int argc, char **argv)
 
 	mg_mgr_free(&mgr);
 
-	ht_destroy(routes);
+	hmfree(routes);
 
     cleanup();
 
@@ -245,6 +246,7 @@ void request_handler(struct mg_connection *conn, struct mg_http_message *hm)
 	int rc;
 	int (*func) (struct mg_connection *conn, struct mg_http_message *hm);
 	char buf[BUFLARGE];
+	int route_index = 0;
 
 #define SNDERR(E) send_error(conn, (E))
 #define CHKERR(E) do { if ((rc) < 0) { send_error(conn, (E)); } } while (0)
@@ -255,13 +257,12 @@ void request_handler(struct mg_connection *conn, struct mg_http_message *hm)
 
 	printf("%s\n", buf);
 
-	func = ht_get(routes, buf);
-
-	if (func == NULL) {
-        SNDERR(404);
-	} else {
+	if ((route_index = hmgeti(routes, buf)) >= 0) {
+		func = routes[route_index].value;
 		rc = func(conn, hm);
 		CHKERR(503);
+	} else {
+        SNDERR(404);
 	}
 }
 
