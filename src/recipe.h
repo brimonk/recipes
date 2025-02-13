@@ -16,6 +16,7 @@ typedef struct Recipe {
     char *cook_time;
     char *servings;
     char *notes;
+	char *link;
 
 	// child tables
 	char **ingredients;
@@ -30,6 +31,7 @@ typedef struct V_Recipe {
 	char *prep_time;
 	char *cook_time;
 	char *servings;
+	char *link;
 } V_Recipe;
 
 // recipe_api_post : endpoint, POST - /api/v1/recipe

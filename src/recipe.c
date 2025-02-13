@@ -548,6 +548,11 @@ static struct Recipe *recipe_from_json(char *s)
 		recipe->notes = strdup(json_string_value(notes));
 	}
 
+	json_t *link = json_object_get(root, "link");
+	if (json_is_string(link)) {
+		recipe->link = strdup(json_string_value(link));
+	}
+
 	json_t *ingredients = json_object_get(root, "ingredients");
 	if (json_is_array(ingredients)) {
 		for (i = 0; i < json_array_size(ingredients); i++) {
@@ -647,6 +652,7 @@ void recipe_free(struct Recipe *recipe)
 		free(recipe->cook_time);
 		free(recipe->servings);
 		free(recipe->notes);
+		free(recipe->link);
 
 		for (size_t i = 0; i < arrlen(recipe->ingredients); i++)
 			free(recipe->ingredients[i]);

@@ -15,13 +15,13 @@ watch: all
 	while [ true ] ; do \
 		pkill $(TARGET) ; \
 		make ; \
-		./$(TARGET) recipe.db & \
+		./$(TARGET) database.db & \
 		inotifywait src -e MODIFY -e CREATE ; \
 	done ; \
 	true
 
 run: all
-	./$(TARGET) recipe.db
+	./$(TARGET) database.db
 
 %.d: %.c
 	@$(CC) $(CFLAGS) $< -MM -MT $(@:.d=.o) >$@

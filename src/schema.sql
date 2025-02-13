@@ -23,6 +23,7 @@ create table if not exists recipes (
     , update_ts    text null
     , delete_ts    text null
     , name         text not null
+    , link         text null
     , prep_time    text null
     , cook_time    text null
     , servings     text null
