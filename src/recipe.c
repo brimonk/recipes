@@ -243,7 +243,7 @@ int recipe_api_delete(struct mg_connection *conn, struct mg_http_message *hm)
 
 	url = strndup(hm->uri.ptr, hm->uri.len);
 
-	rc = sscanf(url, "/api/v1/recipe/%s", id);
+	rc = sscanf(url, "/api/v1/recipe/%127s", id);
 	assert(rc == 1);
 
 	free(url);
@@ -496,17 +496,24 @@ int recipe_delete(char *id)
 
 	rc = sqlite3_prepare_v2(DATABASE, query, -1, &stmt, NULL);
 	if (rc != SQLITE_OK) {
+        ERR("could not prepare query!");
+        return -1;
 	}
 
-	rc = sqlite3_bind_text(stmt, 1, id, -1, NULL);
+	rc = sqlite3_bind_text(stmt, 1, (const char *)id, -1, NULL);
 	if (rc != SQLITE_OK) {
+        ERR("could not bind id!");
+        return -1;
 	}
 
 	rc = sqlite3_step(stmt);
 	if (rc != SQLITE_DONE) {
+        ERR("could not complete delete query!");
+        return -1;
 	}
 
 	sqlite3_finalize(stmt);
+    stmt = NULL;
 
 	return 0;
 }
