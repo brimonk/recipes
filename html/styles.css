@@ -1,0 +1,15 @@
+/*
+ * Brian Chrzanowski
+ * 2021-09-09 13:28:26
+ *
+ * Recipe Webiste CSS
+ */
+
+textarea {
+    /* prevents resizing horizontally */
+    resize: vertical;
+}
+
+p {
+    white-space: pre-wrap;
+}

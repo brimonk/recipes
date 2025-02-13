@@ -361,8 +361,8 @@ class Recipe {
     constructor(id) {
         this.isLoading = true;
 
-        if (id == parseInt(id)) {
-            this.id = parseInt(id);
+        if (id == id) {
+            this.id = id;
             this.fetch();
         } else {
             this.init();
@@ -444,7 +444,7 @@ class Recipe {
 
     // remove : attempts to remove the recipe from the database
     remove() {
-        if (this.id !== undefined && this.id >= 0) {
+        if (this.id !== undefined) {
             return m.request({
                 method: "DELETE",
                 url: `/api/v1/recipe/${this.id}`
@@ -1111,4 +1111,3 @@ const routes = {
 };
 
 m.route(root, "/", routes);
-

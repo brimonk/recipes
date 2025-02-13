@@ -1,6 +1,7 @@
 *.o
 *.d
 *.db
+*.db-journal
 *.db-shm
 *.db-wal
 *.so
@@ -9,6 +10,3 @@ recipe
 meta
 
 .gdb*
-
-html/ui.js
-

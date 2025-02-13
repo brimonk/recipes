@@ -46,6 +46,8 @@
 
 #define ARRSIZE(x)   (sizeof((x))/sizeof((x)[0]))
 
+#define COALESCE(V1_, V2_) ((V1_) ? (V1_) : (V2_))
+
 // some fun macros for variadic functions :^)
 #define PP_ARG_N( \
           _1,  _2,  _3,  _4,  _5,  _6,  _7,  _8,  _9, _10, \
@@ -125,6 +127,9 @@ char *ltrim(char *s);
 /* rtrim : removes whitespace on the "right" (end) of the string */
 char *rtrim(char *s);
 
+// trim: trims the string on both ends
+char *trim(char *s);
+
 /* mklower : makes the string lower cased */
 int mklower(char *s);
 
@@ -184,10 +189,10 @@ enum {
 // TODO (brian): should all of these log to stderr? Yes, if stdout is really output... (should it be?)
 // NOTE (Brian): LOG is taken up by mongoose, and I really don't want to hack that together
 // #define LOG(fmt, ...) (c_fprintf(__FILE__, __LINE__, __FUNCTION__, LOG_LOG, stderr, fmt, ##__VA_ARGS__)) // basic log message
-#define MSG(fmt, ...) (c_fprintf(__FILE__, __LINE__, __FUNCTION__, LOG_MSG, stderr, fmt, ##__VA_ARGS__)) // basic log message
-#define WRN(fmt, ...) (c_fprintf(__FILE__, __LINE__, __FUNCTION__, LOG_WRN, stderr, fmt, ##__VA_ARGS__)) // warning message
-#define ERR(fmt, ...) (c_fprintf(__FILE__, __LINE__, __FUNCTION__, LOG_ERR, stderr, fmt, ##__VA_ARGS__)) // error message
-#define DBG(fmt, ...) (c_fprintf(__FILE__, __LINE__, __FUNCTION__, LOG_DBG, stderr, fmt, ##__VA_ARGS__)) // verbose message
+#define MSG(fmt, ...) (c_fprintf(__FILE__, __LINE__, __FUNCTION__, LOG_MSG, stderr, fmt "\n", ##__VA_ARGS__)) // basic log message
+#define WRN(fmt, ...) (c_fprintf(__FILE__, __LINE__, __FUNCTION__, LOG_WRN, stderr, fmt "\n", ##__VA_ARGS__)) // warning message
+#define ERR(fmt, ...) (c_fprintf(__FILE__, __LINE__, __FUNCTION__, LOG_ERR, stderr, fmt "\n", ##__VA_ARGS__)) // error message
+#define DBG(fmt, ...) (c_fprintf(__FILE__, __LINE__, __FUNCTION__, LOG_DBG, stderr, fmt "\n", ##__VA_ARGS__)) // verbose message
 
 #if defined(COMMON_IMPLEMENTATION)
 
@@ -234,6 +239,12 @@ char *rtrim(char *s)
 		*e = 0;
 
 	return s;
+}
+
+// trim: trims the string on both ends
+char *trim(char *s)
+{
+	return rtrim(ltrim(s));
 }
 
 /* strnullcmp : compare strings, sorting null values as "first" */
@@ -621,6 +632,9 @@ void pcg_seed(struct pcgrand_t *rng, u64 initstate, u64 initseq)
     pcg_rand(rng);
 }
 
+#define STB_DS_IMPLEMENTATION
 #endif // COMMON_IMPLEMENTATION
+
+#include "stb_ds.h"
 
 #endif // COMMON_H

@@ -2,42 +2,42 @@
 // 2021-06-08 20:04:01
 //
 // TODO (Brian)
-// - API
-//   - Login
-// - Session Cookies
-// - All Strings are in a HashMap
-// - Timing Regex (Frontend / Backend)
-//
-// - Image Upload
-//   - Recipes
-//   - User Profiles
-//
-// - User Settings Page
-//   - Password
-//   - Profile Picture
-//   - Email Change?
-//
-// - Email Verification
-//
-// - Forgot Password / Email Password Reset
-//
-// - Performance Tests
-//
-//   Full User Tests:
-//     - 1000 Users
-//     - Create
-//     - Login
-//
-// - Tags are a Dropdown
-//   I'm not sure how to actually make this look good on mobile.
-//
-// - Remove existing migration code, and remake migrations, one file each, so data structures can be
-//   redefined for each state of the database.
+// - convert to sqlite
+//     - get uuid sqlite library (db will generate uuids for us)
+//     - recipe insert
+//     - recipe select
+//     - recipe update
+//     - recipe delete
+//     - recipe search with pagination (should be done?)
+//     - enforce ordering on textlist operations
+// - prep_time / cook_time verification(?)
+// - performance tests
+//     - insert performance
+//     - get performance
+//     - search performance
+//     - delete performance
+// - ui
+//     - tags are a dropdown
+// - security
+//     - email verification
+//     - forgot password / email password reset
+// - image support
+//     - upload
+//     - profile picture / icon
+//     - retrieval via uri
+// - user support
+//     - email verification
+//     - forgot password / email password reset
+//     - settings page
+//         - password change
+//         - profile picture(?)
+//         - email change(?)
+// - cleanup
+//     - why do we have an RNG situation?
+// - navigation
 
 #define COMMON_IMPLEMENTATION
 #include "common.h"
-
-#include "store.h"
 
 #include <unistd.h>
 #include <sys/types.h>
@@ -49,21 +49,24 @@
 #define MG_ENABLE_LOG 0
 #include "mongoose.h"
 
+#include "sqlite3.h"
+
 #include "objects.h"
-#include "ht.h"
 
 #include "recipe.h"
-#include "tag.h"
 #include "user.h"
+#include "tag.h"
 
 #define PORT (2000)
 
-// STATIC STUFF
-
 static magic_t MAGIC_COOKIE;
+
+sqlite3 *DATABASE;
 
 // init: initializes the program
 void init(char *fname);
+// cleanup: cleans up everything from 'init'
+void cleanup();
 
 // event_handler : handles mongoose (web) events
 void event_handler(struct mg_connection *conn, int ev, void *ev_data, void *fn_data);
@@ -91,14 +94,16 @@ int get_codepoint(char *s);
 // xctoi: converts a hex char (ascii) to the corresponding integer value
 int xctoi(char v);
 
-extern handle_t handle;
-
 #define USAGE ("USAGE: %s <dbname>\n")
 #define SCHEMA ("src/schema.sql")
 
 int running;
 
-struct ht *routes;
+typedef struct RouteTableEntry {
+	char *key;
+	int (*value)(struct mg_connection *, struct mg_http_message *);
+} RouteTableEntry;
+RouteTableEntry *routes = NULL;
 
 // handle_sigint: handles SIGINT so we can write to the database
 void handle_sigint(int sig)
@@ -117,32 +122,28 @@ int main(int argc, char **argv)
 
 	init(argv[1]);
 
-	store_write();
-
 	signal(SIGINT, handle_sigint);
 
 	// setup the routing hashtable
-	routes = ht_create();
 
-	ht_set(routes, "POST /api/v1/recipe", (void *)recipe_api_post);
-	ht_set(routes, "GET /api/v1/recipe/list", (void *)recipe_api_getlist);
-	ht_set(routes, "GET /api/v1/recipe/:id", (void *)recipe_api_get);
-	ht_set(routes, "PUT /api/v1/recipe/:id", (void *)recipe_api_put);
-	ht_set(routes, "DELETE /api/v1/recipe/:id", (void *)recipe_api_delete);
+	sh_new_strdup(routes);
 
-	ht_set(routes, "POST /api/v1/newuser", (void *)user_api_newuser);
-	ht_set(routes, "POST /api/v1/login", (void *)user_api_login);
-	ht_set(routes, "POST /api/v1/logout", (void *)user_api_logout);
-	ht_set(routes, "GET /api/v1/whoami", (void *)user_api_whoami);
+	shput(routes, "POST /api/v1/recipe", (void *)recipe_api_post);
+	shput(routes, "GET /api/v1/recipe/list", (void *)recipe_api_getlist);
+	shput(routes, "GET /api/v1/recipe/:id", (void *)recipe_api_get);
+	shput(routes, "PUT /api/v1/recipe/:id", (void *)recipe_api_put);
+	shput(routes, "DELETE /api/v1/recipe/:id", (void *)recipe_api_delete);
 
-	ht_set(routes, "GET /api/v1/tags", (void *)tag_api_getlist);
+	shput(routes, "POST /api/v1/newuser", (void *)user_api_newuser);
+	shput(routes, "POST /api/v1/login", (void *)user_api_login);
+	shput(routes, "POST /api/v1/logout", (void *)user_api_logout);
+	shput(routes, "GET /api/v1/whoami", (void *)user_api_whoami);
 
-	ht_set(routes, "GET /api/v1/static", (void *)send_file_static);
-	ht_set(routes, "GET /ui.js", (void *)send_file_uijs);
-	ht_set(routes, "GET /mithril.js", (void *)send_file_mithriljs);
-	ht_set(routes, "GET /styles.css", (void *)send_file_styles);
-	ht_set(routes, "GET /index.html", (void *)send_file_index);
-	ht_set(routes, "GET /", (void *)send_file_index);
+	shput(routes, "GET /api/v1/tags", (void *)tag_api_getlist);
+
+    for (size_t i = 0; i < hmlen(routes); i++) {
+        printf("K: '%s', V: %p\n", routes[i].key, routes[i].value);
+    }
 
 	mg_mgr_init(&mgr);
 
@@ -160,9 +161,9 @@ int main(int argc, char **argv)
 
 	mg_mgr_free(&mgr);
 
-	store_write();
+	shfree(routes);
 
-	ht_destroy(routes);
+    cleanup();
 
 	return 0;
 }
@@ -245,6 +246,7 @@ void request_handler(struct mg_connection *conn, struct mg_http_message *hm)
 	int rc;
 	int (*func) (struct mg_connection *conn, struct mg_http_message *hm);
 	char buf[BUFLARGE];
+	int route_index = 0;
 
 #define SNDERR(E) send_error(conn, (E))
 #define CHKERR(E) do { if ((rc) < 0) { send_error(conn, (E)); } } while (0)
@@ -255,13 +257,15 @@ void request_handler(struct mg_connection *conn, struct mg_http_message *hm)
 
 	printf("%s\n", buf);
 
-	func = ht_get(routes, buf);
-
-	if (func == NULL) {
-        SNDERR(404);
-	} else {
+	if ((route_index = shgeti(routes, buf)) >= 0) {
+		func = routes[route_index].value;
+        printf("FUNCTION POINTER: %p\n", func);
 		rc = func(conn, hm);
 		CHKERR(503);
+	} else {
+        printf("FUNCTION POINTER NOT FOUND\n");
+		struct mg_http_serve_opts opts = { .root_dir = "./html" };
+		mg_http_serve_dir(conn, hm, &opts);
 	}
 }
 
@@ -335,6 +339,64 @@ int send_error(struct mg_connection *conn, int errcode)
 	return 0;
 }
 
+// setup_sqlite: sets up sqlite on the global handle (DATABASE)
+int setup_sqlite(char *fname)
+{
+	char *errmsg;
+	int rc;
+
+	rc = sqlite3_open(fname, &DATABASE);
+	if (rc != SQLITE_OK) {
+		ERR("sqlite3_open error: %s\n", sqlite3_errstr(rc));
+		return -1;
+	}
+
+    // read in the schema, and execute it (more involved than I'd like...)
+    {
+        size_t schema_len = 0;
+        char *schema = sys_readfile("./src/schema.sql", &schema_len);
+
+        for (char *sql = trim(schema), *next = NULL; sql && strlen(sql) > 0; sql = trim(next)) {
+            sqlite3_stmt *stmt = NULL;
+
+            rc = sqlite3_prepare_v2(DATABASE, sql, -1, &stmt, (const char **)&next);
+            if (rc != SQLITE_OK) {
+                ERR("SQL Error while bootstrapping database! %s\n", sqlite3_errstr(rc));
+                exit(1);
+            }
+
+            rc = sqlite3_step(stmt);
+            if (rc != SQLITE_DONE) {
+                printf("RC = %d\n", rc);
+                printf("SQL %ld\n%s\n", strlen(sql), sql);
+                ERR("SQL Execution failed while bootstrapping database! %s\n", sqlite3_errstr(rc));
+                exit(1);
+            }
+
+            sqlite3_finalize(stmt);
+        }
+
+        free(schema);
+    }
+
+	// load our various extensions
+	{
+		sqlite3_enable_load_extension(DATABASE, true);
+
+		rc = sqlite3_load_extension(DATABASE, "./sqlite3_uuid", "sqlite3_uuid_init", &errmsg);
+		if (rc == SQLITE_ERROR) {
+			ERR("Error loading 'uuid' extension: %s\n", errmsg);
+			exit(1);
+		}
+
+		sqlite3_enable_load_extension(DATABASE, false);
+	}
+
+    // TODO (Brian) execute migrations in the future
+
+	return 0;
+}
+
 // init : initializes the program
 void init(char *fname)
 {
@@ -361,10 +423,16 @@ void init(char *fname)
         exit(1);
     }
 
-	rc = store_open(fname);
+	rc = setup_sqlite(fname);
 	if (rc < 0) {
-		ERR("Couldn't initizlize the backing store!\n");
+		ERR("Couldn't initialize sqlite!\n");
 		exit(1);
 	}
 }
 
+// cleanup: cleans up everything from 'init'
+void cleanup()
+{
+    sqlite3_close(DATABASE);
+    magic_close(MAGIC_COOKIE);
+}
