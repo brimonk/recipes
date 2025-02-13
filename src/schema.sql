@@ -77,14 +77,14 @@ from recipes;
 create view if not exists v_recipes
     (id, search_text) as
 select
-    r.id as id, r.search_text || '|' || i.search_text || '|' || s.search_text || '|' || t.search_text as search_text
-from (select id, name || '|' || prep_time || '|' || cook_time || '|' || servings as search_text from recipes where delete_ts is null) as r
-join (
+    r.id as id, concat(r.search_text, '|', i.search_text, '|', s.search_text, '|', t.search_text) as search_text
+from (select id, concat(name, '|', prep_time, '|', cook_time, '|', servings) as search_text from recipes where delete_ts is null) as r
+left join (
     select distinct parent_id, group_concat(text, '|') over (partition by parent_id) as search_text from ingredients
 ) i on r.id = i.parent_id
-join (
+left join (
     select distinct parent_id, group_concat(text, '|') over (partition by parent_id) as search_text from steps
 ) s on r.id = s.parent_id
-join (
+left join (
     select distinct parent_id, group_concat(text, '|') over (partition by parent_id) as search_text from tags
 ) t on r.id = t.parent_id;
