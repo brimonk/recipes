@@ -78,6 +78,11 @@ function P(text) {
     return m("p", text);
 }
 
+// A : anchor wrapper
+function A(href, text) {
+    return m("a", { href: href }, text);
+}
+
 // DIV: returns m("div", arg)
 function DIV(arg) {
     return m("div", arg);
@@ -408,6 +413,7 @@ class Recipe {
             this.cook_time = x.cook_time;
             this.prep_time = x.prep_time;
             this.servings = x.servings;
+            this.link = x.link;
 
             this.note = x.note;
 
@@ -509,6 +515,10 @@ function RecipeViewComponent(vnode) {
                     P(recipe.servings),
                 ]);
 
+                condpush(content, recipe.link, [
+                    A(recipe.link, "External Link"),
+                ]);
+
                 condpush(content, recipe.ingredients.length > 0, [
                     m(ListComponent, {
                         name: "Ingredient", list: recipe.ingredients, type: "ul", isview: true
@@ -531,6 +541,8 @@ function RecipeViewComponent(vnode) {
                     H3("Notes"),
                     m("p", recipe.note),
                 ]);
+
+                content.push(Divider());
 
                 content.push(Button("Edit", (e) => m.route.set(`/recipe/${recipe.id}/edit`)));
             }
@@ -585,6 +597,10 @@ function RecipeEditComponent(vnode) {
 
             let servings_ctrl = m(InputComponent, {
                 object: recipe, prop: "servings", label: "Servings", maxlen: 128
+            });
+
+            let link_ctrl = m(InputComponent, {
+                object: recipe, prop: "link", label: "External Link", maxlen: 1024
             });
 
             let notes_ctrl = m(TextAreaComponent, {
@@ -642,6 +658,7 @@ function RecipeEditComponent(vnode) {
                         m("div", { class: "mui-col-md-4" }, cook_time_ctrl),
                         m("div", { class: "mui-col-md-4" }, servings_ctrl),
                     ]),
+                    link_ctrl,
                     ingredients_ctrl,
                     steps_ctrl,
                     tags_ctrl,

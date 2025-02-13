@@ -260,7 +260,7 @@ int recipe_insert(Recipe *recipe)
 	sqlite3_exec(DATABASE, "begin transaction;", NULL, NULL, NULL);
 
 	char *query =
-		"insert into recipes (name, prep_time, cook_time, servings, notes) values (?, ?, ?, ?, ?);";
+		"insert into recipes (name, prep_time, cook_time, servings, link, notes) values (?, ?, ?, ?, ?, ?);";
 
 	rc = sqlite3_prepare_v2(DATABASE, query, -1, &stmt, NULL);
 	if (rc != SQLITE_OK) {
@@ -287,10 +287,16 @@ int recipe_insert(Recipe *recipe)
 		sqlite3_bind_null(stmt, 4);
 	}
 
-	if (recipe->notes) {
-		sqlite3_bind_text(stmt, 5, (const char *)recipe->notes, -1, NULL);
+	if (recipe->link) {
+		sqlite3_bind_text(stmt, 5, (const char *)recipe->link, -1, NULL);
 	} else {
 		sqlite3_bind_null(stmt, 5);
+	}
+
+	if (recipe->notes) {
+		sqlite3_bind_text(stmt, 6, (const char *)recipe->notes, -1, NULL);
+	} else {
+		sqlite3_bind_null(stmt, 6);
 	}
 
 	rc = sqlite3_step(stmt);
@@ -395,7 +401,7 @@ struct Recipe *recipe_get_by_id(char *id)
 	int rc;
 
 	FILE *stream = open_memstream(&query, &query_sz);
-	fprintf(stream, "select name, prep_time, cook_time, servings, notes from recipes where id = ?;");
+	fprintf(stream, "select name, prep_time, cook_time, servings, link, notes from recipes where id = ?;");
 	fclose(stream);
 
 	rc = sqlite3_prepare_v2(DATABASE, query, -1, &stmt, NULL);
@@ -412,7 +418,8 @@ struct Recipe *recipe_get_by_id(char *id)
 		recipe->prep_time = strdup_null((char *)sqlite3_column_text(stmt, 1));
 		recipe->cook_time = strdup_null((char *)sqlite3_column_text(stmt, 2));
 		recipe->servings  = strdup_null((char *)sqlite3_column_text(stmt, 3));
-		recipe->notes	 = strdup_null((char *)sqlite3_column_text(stmt, 4));
+		recipe->link     = strdup_null((char *)sqlite3_column_text(stmt, 4));
+		recipe->notes	 = strdup_null((char *)sqlite3_column_text(stmt, 5));
 	}
 
 	sqlite3_finalize(stmt);
@@ -615,7 +622,7 @@ static char *recipe_to_json(struct Recipe *recipe)
 
 	object = json_pack_ex(
 		&error, 0,
-		"{s:s, s:s, s:s?, s:s?, s:s, s:s?, s:s?, s:s?, s:s?, s:o, s:o, s:o}",
+		"{s:s, s:s, s:s?, s:s?, s:s, s:s?, s:s?, s:s?, s:s?, s:s?, s:o, s:o, s:o}",
 		"id", recipe->metadata.id,
 		"create_ts", recipe->metadata.create_ts,
 		"update_ts", recipe->metadata.update_ts,
@@ -624,6 +631,7 @@ static char *recipe_to_json(struct Recipe *recipe)
 		"prep_time", recipe->prep_time,
 		"cook_time", recipe->cook_time,
 		"servings", recipe->servings,
+		"link", recipe->link,
 		"note", recipe->notes,
 		"ingredients", ingredients,
 		"steps", steps,
