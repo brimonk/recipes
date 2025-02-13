@@ -432,6 +432,18 @@ class Recipe {
         return true;
     }
 
+    // scrubMe : returns the current object, but with array values stripped of falsey values
+    // (empty strings mostly).
+    scrubMe() {
+        const scrubbed = {};
+        Object.assign(scrubbed, this, {
+            ingredients: this.ingredients.filter(x => x),
+            steps: this.steps.filter(x => x),
+            tags: this.tags.filter(x => x),
+        });
+        return scrubbed;
+    }
+
     // submit : attempts to submit the current object to the backend
     submit() {
         if (this.isValid()) {
@@ -439,13 +451,13 @@ class Recipe {
                 return m.request({
                     method: "POST",
                     url: `/api/v1/recipe`,
-                    body: this
+                    body: this.scrubMe(),
                 });
             } else {
                 return m.request({
                     method: "PUT",
                     url: `/api/v1/recipe/${this.id}`,
-                    body: this
+                    body: this.scrubMe(),
                 });
             }
         } else {
@@ -497,19 +509,19 @@ function RecipeViewComponent(vnode) {
                     P(recipe.servings),
                 ]);
 
-                condpush(content, recipe.ingredients, [
+                condpush(content, recipe.ingredients.length > 0, [
                     m(ListComponent, {
                         name: "Ingredient", list: recipe.ingredients, type: "ul", isview: true
                     }),
                 ]);
 
-                condpush(content, recipe.steps, [
+                condpush(content, recipe.steps.length > 0, [
                     m(ListComponent, {
                         name: "Step", list: recipe.steps, type: "ol", isview: true
                     }),
                 ]);
 
-                condpush(content, recipe.tags, [
+                condpush(content, recipe.tags.length > 0, [
                     m(ListComponent, {
                         name: "Tag", list: recipe.tags, type: "ul", isview: true
                     }),
