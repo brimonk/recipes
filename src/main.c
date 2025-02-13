@@ -3,12 +3,7 @@
 //
 // TODO (Brian)
 // - convert to sqlite
-//     - get uuid sqlite library (db will generate uuids for us)
-//     - recipe insert
-//     - recipe select
-//     - recipe update
 //     - recipe delete
-//     - recipe search with pagination (should be done?)
 //     - enforce ordering on textlist operations
 // - prep_time / cook_time verification(?)
 // - performance tests
@@ -124,8 +119,6 @@ int main(int argc, char **argv)
 
 	signal(SIGINT, handle_sigint);
 
-	// setup the routing hashtable
-
 	sh_new_strdup(routes);
 
 	shput(routes, "POST /api/v1/recipe", (void *)recipe_api_post);
@@ -194,6 +187,8 @@ void event_handler(struct mg_connection *conn, int ev, void *ev_data, void *fn_d
 	}
 }
 
+static int is_uuidv4(char *s);
+
 // format_target_string : format the incomming requets for the routing hashtable
 int format_target_string(char *s, struct mg_http_message *hm, size_t len)
 {
@@ -219,7 +214,7 @@ int format_target_string(char *s, struct mg_http_message *hm, size_t len)
 	buflen = 0;
 
 	for (tok = strtok(readfrom, "/"); tok != NULL && buflen <= len; tok = strtok(NULL, "/")) {
-		if (isdigit(*tok)) {
+		if (is_uuidv4(tok)) {
 			buflen += snprintf(copy + buflen, sizeof(copy) - buflen, "/:id");
 		} else {
 			hasq = strchr(tok, '?');
@@ -263,7 +258,6 @@ void request_handler(struct mg_connection *conn, struct mg_http_message *hm)
 		rc = func(conn, hm);
 		CHKERR(503);
 	} else {
-        printf("FUNCTION POINTER NOT FOUND\n");
 		struct mg_http_serve_opts opts = { .root_dir = "./html" };
 		mg_http_serve_dir(conn, hm, &opts);
 	}
@@ -435,4 +429,61 @@ void cleanup()
 {
     sqlite3_close(DATABASE);
     magic_close(MAGIC_COOKIE);
+}
+
+// is_uuidv4: returns true if this string represents a uuidv4
+static int is_uuidv4(char *s)
+{
+    // NOTE (brian) we just write this all out - string UUIDs have a very specific representation
+#define CHECK_CHAR(x)   if (!(isxdigit(*x))) return false; x++;
+
+    CHECK_CHAR(s);
+    CHECK_CHAR(s);
+    CHECK_CHAR(s);
+    CHECK_CHAR(s);
+    CHECK_CHAR(s);
+    CHECK_CHAR(s);
+    CHECK_CHAR(s);
+    CHECK_CHAR(s);
+
+    if (*s != '-') { return false; } s++;
+
+    CHECK_CHAR(s);
+    CHECK_CHAR(s);
+    CHECK_CHAR(s);
+    CHECK_CHAR(s);
+
+    if (*s != '-') { return false; } s++;
+
+    // UUIDv4's have a '4' in this position
+    if (*s != '4') { return false; } s++;
+    CHECK_CHAR(s);
+    CHECK_CHAR(s);
+    CHECK_CHAR(s);
+
+    if (*s != '-') { return false; } s++;
+
+    if (!(*s == '8' || *s == '9' || toupper(*s) == 'A' || toupper(*s) == 'B')) { return false; }
+    s++;
+    CHECK_CHAR(s);
+    CHECK_CHAR(s);
+    CHECK_CHAR(s);
+
+    if (*s != '-') { return false; } s++;
+
+    CHECK_CHAR(s);
+    CHECK_CHAR(s);
+    CHECK_CHAR(s);
+    CHECK_CHAR(s);
+    CHECK_CHAR(s);
+    CHECK_CHAR(s);
+    CHECK_CHAR(s);
+    CHECK_CHAR(s);
+    CHECK_CHAR(s);
+    CHECK_CHAR(s);
+    CHECK_CHAR(s);
+    CHECK_CHAR(s);
+
+    return true;
+#undef CHECK_CHAR
 }

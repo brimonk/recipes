@@ -234,6 +234,8 @@ int db_load_metadata_from_id(DB_Metadata *metadata, char *table, char *id)
 
 	rc = sqlite3_prepare_v2(DATABASE, query, -1, &stmt, NULL);
 	if (rc != SQLITE_OK) { // TODO log error
+        ERR("could not fetch metadata for record with id '%s'", id);
+        free(query);
 		return -1;
 	}
 
@@ -346,6 +348,8 @@ int db_delete_textlist(char *table, char *id)
 
 	sqlite3_finalize(stmt);
 
+    free(query);
+
 	return rc == SQLITE_DONE ? 0 : -1;
 }
 
@@ -376,4 +380,16 @@ void db_transaction_commit()
 void db_transaction_rollback()
 {
 	sqlite3_exec(DATABASE, "rollback transaction;", NULL, NULL, NULL);
+}
+
+DB_Metadata metadata_clone(DB_Metadata original)
+{
+    DB_Metadata clone = {
+        .rowid = original.rowid,
+        .id = strdup(original.id),
+        .create_ts = strdup_null(original.create_ts),
+        .update_ts = strdup_null(original.update_ts),
+        .delete_ts = strdup_null(original.delete_ts),
+    };
+    return clone;
 }

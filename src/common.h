@@ -71,16 +71,16 @@
 #define PP_NARG(...)     (sizeof(#__VA_ARGS__) - 1 ? PP_NARG_(__VA_ARGS__, PP_RSEQ_N()) : 0)
 
 /* quick and dirty, cleaner typedefs */
-typedef unsigned char      u8;
-typedef unsigned short     u16;
-typedef unsigned int       u32;
-typedef unsigned long long u64;
-typedef char               s8;
-typedef short              s16;
-typedef int                s32;
-typedef long long          s64;
-typedef float              f32;
-typedef double             f64;
+typedef uint8_t     u8;
+typedef uint16_t    u16;
+typedef uint32_t    u32;
+typedef uint64_t    u64;
+typedef int8_t      i8;
+typedef int16_t     i16;
+typedef int32_t     i32;
+typedef int64_t     i64;
+typedef float       f32;
+typedef double      f64;
 
 #define BUFSMALL (256)
 #define BUFLARGE (4096)
@@ -146,7 +146,7 @@ int strneq(char *s, char *t);
 int is_num(char *s);
 
 /* c_atoi : stdlib's atoi, but returns 0 if the pointer is NULL */
-s32 c_atoi(char *s);
+i32 c_atoi(char *s);
 
 /* c_cmp_strstr : common comparator for two strings */
 int c_cmp_strstr(const void *a, const void *b);
@@ -158,12 +158,12 @@ int c_cmp_strstr(const void *a, const void *b);
 char *strdup_null(char *s);
 
 // strslice : returns a copy of the string starting at s + n chars, and going for at most j
-char *strslice(char *s, s32 n, s32 j);
+char *strslice(char *s, i32 n, i32 j);
 
 struct pcgrand_t {
 	u64 state;
 	u64 inc;
-	s32 init;
+	i32 init;
 };
 
 // RNG FUNCTIONS
@@ -414,7 +414,7 @@ char *bstrtok(char **str, char *delim)
 char *sys_readfile(char *path, size_t *len)
 {
 	FILE *fp;
-	s64 size;
+	i64 size;
 	char *buf;
 
 	fp = fopen(path, "rb");
@@ -449,7 +449,7 @@ int streq(char *s, char *t)
 /* strneq : return true if the strings are the same, up to the smallest string */
 int strneq(char *s, char *t)
 {
-	s32 n;
+	i32 n;
 	n = MIN(strlen(s), strlen(t));
 	return strncmp(s, t, n) == 0;
 }
@@ -466,7 +466,7 @@ int is_num(char *s)
 }
 
 /* c_atoi : stdlib's atoi, but returns 0 if the pointer is NULL */
-s32 c_atoi(char *s)
+i32 c_atoi(char *s)
 {
 	return s == NULL ? 0 : atoi(s);
 }
@@ -536,7 +536,7 @@ char *strdup_null(char *s)
 }
 
 // strslice : returns a copy of the string starting at s + n chars, and going for at most j
-char *strslice(char *s, s32 n, s32 j)
+char *strslice(char *s, i32 n, i32 j)
 {
 	char *t;
 

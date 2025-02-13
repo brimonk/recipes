@@ -106,8 +106,9 @@ int recipe_api_post(struct mg_connection *conn, struct mg_http_message *hm)
 // recipe_api_put : endpoint, PUT - /api/v1/recipe/{id}
 int recipe_api_put(struct mg_connection *conn, struct mg_http_message *hm)
 {
-	s64 rc;
-	struct Recipe *recipe;
+	int rc;
+	struct Recipe *updated;
+    struct Recipe *recipe;
 	char *url;
 	char *json;
 	char id[128] = {0};
@@ -124,29 +125,38 @@ int recipe_api_put(struct mg_connection *conn, struct mg_http_message *hm)
 		return -1;
 	}
 
-	recipe = recipe_from_json(json);
+	updated = recipe_from_json(json);
 
 	free(json);
 
-	if (recipe == NULL) { // TODO (Brian): HTTP Error
-		ERR("couldn't parse recipe from json!\n");
+	if (updated == NULL) { // TODO (Brian): HTTP Error
+		ERR("couldn't parse updated recipe from json!\n");
 		return -1;
 	}
 
-	if (recipe_validation(recipe) < 0) { // TODO (Brian): HTTP Error
-		ERR("recipe record invalid!\n");
+    recipe = recipe_get_by_id(id);
+    if (recipe == NULL) {
+        ERR("couldn't load the recipe with id: '%s'", id);
+        return -1;
+    }
+
+    updated->metadata = metadata_clone(recipe->metadata);
+	recipe_free(recipe);
+
+	if (recipe_validation(updated) < 0) { // TODO (Brian): HTTP Error
+		ERR("updated recipe record invalid!\n");
 		return -1;
 	}
 
-	rc = recipe_update(recipe);
+	rc = recipe_update(updated);
 	if (rc < 0) {
 		ERR("couldn't update the recipe!\n");
 		return -1;
 	}
 
-	mg_http_reply(conn, 200, NULL, "{\"id\":\"%s\"}", recipe->metadata.id);
+	mg_http_reply(conn, 200, NULL, "{\"id\":\"%s\"}", updated->metadata.id);
 
-	recipe_free(recipe);
+	recipe_free(updated);
 
 	return 0;
 }
@@ -360,14 +370,54 @@ int recipe_update(Recipe *recipe)
 	rc = db_delete_textlist("tags", recipe->metadata.id);
 	if (rc < 0) goto recipe_update_fail;
 
-	char *query = "update recipes set name = ?, prep_time = ?, cook_time = ?, servings = ?, notes = ? where id = ?;";
+	char *query = "update recipes set name = ?, prep_time = ?, cook_time = ?, servings = ?, link = ?, notes = ? where id = ?;";
 
 	sqlite3_stmt *stmt;
 
 	rc = sqlite3_prepare_v2(DATABASE, query, -1, &stmt, NULL);
 	if (rc != SQLITE_OK) {
+        rc = -1;
 		goto recipe_update_fail;
 	}
+
+	sqlite3_bind_text(stmt, 1, (const char *)recipe->name, -1, NULL);
+
+	if (recipe->prep_time) {
+		sqlite3_bind_text(stmt, 2, (const char *)recipe->prep_time, -1, NULL);
+	} else {
+		sqlite3_bind_null(stmt, 2);
+	}
+
+	if (recipe->cook_time) {
+		sqlite3_bind_text(stmt, 3, (const char *)recipe->cook_time, -1, NULL);
+	} else {
+		sqlite3_bind_null(stmt, 3);
+	}
+
+	if (recipe->servings) {
+		sqlite3_bind_text(stmt, 4, (const char *)recipe->servings, -1, NULL);
+	} else {
+		sqlite3_bind_null(stmt, 4);
+	}
+
+	if (recipe->link) {
+		sqlite3_bind_text(stmt, 5, (const char *)recipe->link, -1, NULL);
+	} else {
+		sqlite3_bind_null(stmt, 5);
+	}
+
+	if (recipe->notes) {
+		sqlite3_bind_text(stmt, 6, (const char *)recipe->notes, -1, NULL);
+	} else {
+		sqlite3_bind_null(stmt, 6);
+	}
+
+    sqlite3_bind_text(stmt, 7, (const char *)recipe->metadata.id, -1, NULL);
+
+	rc = sqlite3_step(stmt);
+
+	sqlite3_finalize(stmt);
+	stmt = NULL;
 
 	rc = db_insert_textlist("ingredients", recipe->metadata.id, recipe->ingredients);
 	if (rc < 0) goto recipe_update_fail;
@@ -383,8 +433,8 @@ int recipe_update(Recipe *recipe)
 recipe_update_fail:
 	if (rc) db_transaction_rollback();
 	if (stmt != NULL) sqlite3_finalize(stmt);
-	if (query != NULL) free(query);
-	return -1;
+
+	return rc;
 }
 
 // recipe_get_by_id : fetches a recipe object from the store by id, and parses it

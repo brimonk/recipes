@@ -560,14 +560,15 @@ function RecipeEditComponent(vnode) {
     let id = m.route.param("id");
     let recipe = new Recipe(id);
 
-    m.request({
-        method: "GET",
-        url: `/api/v1/tags`,
-    }).then((x) => {
-        console.log(x);
-    }).catch((err) => {
-        console.error(err);
-    });
+    // TODO (brian) update the tags component to be a textbox with a dropdown to select previous
+    // m.request({
+    //     method: "GET",
+    //     url: `/api/v1/tags`,
+    // }).then((x) => {
+    //     console.log(x);
+    // }).catch((err) => {
+    //     console.error(err);
+    // });
 
     return {
         view: function(vnode) {

@@ -60,4 +60,8 @@ void db_transaction_commit();
 // db_transaction_rollback: rolls the currently open transaction back
 void db_transaction_rollback();
 
+// metadata_clone: useful to ensure updated / deleted records have all of the metadata before
+// performing database operations with them.
+DB_Metadata metadata_clone(DB_Metadata original);
+
 #endif // OBJECTS_H

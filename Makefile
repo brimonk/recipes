@@ -7,8 +7,6 @@ SRC=$(wildcard src/*.c)
 OBJ=$(SRC:.c=.o)
 DEP=$(SRC:.c=.d)
 
-JS=$(wildcard src/*.js)
-
 all: $(TARGET) sqlite3_uuid.so
 
 watch: all
@@ -38,5 +36,4 @@ sqlite3_uuid.so: src/uuid.c
 	$(CC) $(CFLAGS) -fPIC -shared -o $@ $^
 
 clean:
-	rm -f $(OBJ) $(DEP) $(TARGET) html/ui.js sqlite3_uuid.so
-
+	rm -f $(OBJ) $(DEP) $(TARGET) sqlite3_uuid.so
