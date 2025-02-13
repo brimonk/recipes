@@ -42,6 +42,12 @@ function StaticDataOrBlank(x) {
     return x ?? "";
 }
 
+function condpush(arr, cond, values) {
+    if (cond) {
+        arr.push(...values);
+    }
+}
+
 // VError: a validation error constructor
 function VError(prop, msg) {
     return { prop: prop, msg: msg };
@@ -483,41 +489,51 @@ function RecipeViewComponent(vnode) {
                     notesComponent = null;
                 }
 
-                content = [
-                    H2(recipe.name),
+                let content = [];
 
-                    DIV([
-                        H3("Preparation Time"),
-                        P(recipe.prep_time),
+                content.push(H2(recipe.name));
 
-                        H3("Cook Time"),
-                        P(recipe.cook_time),
+                condpush(content, recipe.prep_time, [
+                    H3("Preparation Time"),
+                    P(recipe.prep_time),
+                ]);
 
-                        H3("Servings"),
-                        P(recipe.servings),
+                condpush(content, recipe.cook_time, [
+                    H3("Cook Time"),
+                    P(recipe.cook_time),
+                ]);
 
-                        m(ListComponent, {
-                            name: "Ingredient", list: recipe.ingredients, type: "ul", isview: true
-                        }),
+                condpush(content, recipe.servings, [
+                    H3("Servings"),
+                    P(recipe.servings),
+                ]);
 
-                        m(ListComponent, {
-                            name: "Step", list: recipe.steps, type: "ol", isview: true
-                        }),
+                condpush(content, recipe.ingredients, [
+                    m(ListComponent, {
+                        name: "Ingredient", list: recipe.ingredients, type: "ul", isview: true
+                    }),
+                ]);
 
-                        m(ListComponent, {
-                            name: "Tag", list: recipe.tags, type: "ul", isview: true
-                        }),
+                condpush(content, recipe.steps, [
+                    m(ListComponent, {
+                        name: "Step", list: recipe.steps, type: "ol", isview: true
+                    }),
+                ]);
 
-                        notesComponent,
+                condpush(content, recipe.tags, [
+                    m(ListComponent, {
+                        name: "Tag", list: recipe.tags, type: "ul", isview: true
+                    }),
+                ]);
 
-                        Button("Edit", (e) => m.route.set(`/recipe/${recipe.id}/edit`))
-                    ])
-                ];
+                notesComponent,
+
+                Button("Edit", (e) => m.route.set(`/recipe/${recipe.id}/edit`))
             }
 
             return [
                 m(MenuComponent),
-                content
+                DIV([ content ]),
             ];
         }
     };
