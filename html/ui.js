@@ -366,8 +366,8 @@ class Recipe {
     constructor(id) {
         this.isLoading = true;
 
-        if (id == parseInt(id)) {
-            this.id = parseInt(id);
+        if (id) {
+            this.id = id;
             this.fetch();
         } else {
             this.init();
