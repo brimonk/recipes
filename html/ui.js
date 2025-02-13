@@ -478,18 +478,7 @@ function RecipeViewComponent(vnode) {
             if (recipe.isLoading) {
                 content = m("p", "Now Loading...");
             } else {
-                let notesComponent;
-
-                if (recipe.note) {
-                    notesComponent = DIV([
-                        H3("Notes"),
-                        m("p", recipe.note),
-                    ]);
-                } else {
-                    notesComponent = null;
-                }
-
-                let content = [];
+                content = [];
 
                 content.push(H2(recipe.name));
 
@@ -526,14 +515,17 @@ function RecipeViewComponent(vnode) {
                     }),
                 ]);
 
-                notesComponent,
+                condpush(content, recipe.note, [
+                    H3("Notes"),
+                    m("p", recipe.note),
+                ]);
 
-                Button("Edit", (e) => m.route.set(`/recipe/${recipe.id}/edit`))
+                content.push(Button("Edit", (e) => m.route.set(`/recipe/${recipe.id}/edit`)));
             }
 
             return [
                 m(MenuComponent),
-                DIV([ content ]),
+                DIV(content),
             ];
         }
     };
