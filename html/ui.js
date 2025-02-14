@@ -319,8 +319,6 @@ function ListComponent(vnode) {
 
             const down = Button("\u25BC", () => [a[i + 1], a[i]] = [a[i], a[i + 1]]);
 
-            container.push(textarea);
-
             if (a.length > 1) {
                 buttons.push(sub);
 
@@ -333,7 +331,9 @@ function ListComponent(vnode) {
                 }
             }
 
-            container.push(m("div", { class: "mui-col-md-2 mui-col-xs-6" }, buttons));
+            container.push(textarea);
+
+            container.push(m("div", { class: "mui-col-md-2 mui-col-xs-4" }, buttons));
 
             return m("div", { class: "mui-row" }, container);
         });
@@ -525,11 +525,15 @@ function RecipeViewComponent(vnode) {
                     }),
                 ]);
 
+                condpush(content, content.length > 0 && recipe.steps.length, [ Divider() ]);
+
                 condpush(content, recipe.steps.length > 0, [
                     m(ListComponent, {
                         name: "Step", list: recipe.steps, type: "ol", isview: true
                     }),
                 ]);
+
+                condpush(content, content.length > 0 && recipe.tags.length, [ Divider() ]);
 
                 condpush(content, recipe.tags.length > 0, [
                     m(ListComponent, {
@@ -537,12 +541,12 @@ function RecipeViewComponent(vnode) {
                     }),
                 ]);
 
+                condpush(content, recipe.note, [ Divider() ]);
+
                 condpush(content, recipe.note, [
                     H3("Notes"),
                     m("p", recipe.note),
                 ]);
-
-                content.push(Divider());
 
                 content.push(Button("Edit", (e) => m.route.set(`/recipe/${recipe.id}/edit`)));
             }
@@ -661,8 +665,11 @@ function RecipeEditComponent(vnode) {
                     ]),
                     link_ctrl,
                     ingredients_ctrl,
+                    Divider(),
                     steps_ctrl,
+                    Divider(),
                     tags_ctrl,
+                    Divider(),
                     notes_ctrl,
 
                     DIV(buttons)
