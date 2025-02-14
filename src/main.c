@@ -2,34 +2,43 @@
 // 2021-06-08 20:04:01
 //
 // TODO (Brian)
-// - convert to sqlite
-//     - recipe delete
-//     - enforce ordering on textlist operations
-// - prep_time / cook_time verification(?)
-// - performance tests
-//     - insert performance
-//     - get performance
-//     - search performance
-//     - delete performance
-// - ui
-//     - tags are a dropdown
-// - security
-//     - email verification
-//     - forgot password / email password reset
-// - image support
-//     - upload
-//     - profile picture / icon
-//     - retrieval via uri
-// - user support
-//     - email verification
-//     - forgot password / email password reset
-//     - settings page
-//         - password change
-//         - profile picture(?)
-//         - email change(?)
-// - cleanup
-//     - why do we have an RNG situation?
-// - navigation
+//
+// LOGIN SCRIPT
+//
+// After much consideration, I've determined that the correct thing to do regarding users is to
+// simply have a script to create new users, assign them some kind of default password, and allow
+// them to login with this.
+//
+// In this way, there won't be any of the "modern" website nonsense.
+//
+// PERFORMANCE TESTS
+//
+// Since the goal (as defined by the README) is a high-performance web thing, certainly this means
+// we should be able to have decent performance metrics, or whatever.
+//
+// We should test all of the following, in an e2e kind of a way, probably with some kind of unit
+// tests.
+//
+// 1. POST/INSERT Performance
+// 2. GET/SELECT  Performance
+// 3. PUT/UPDATE  Performance
+// 4. DELETE/DELETE Performance
+// 5. SEARCH      Performance (pagination, etc.)
+//
+// UI TODO
+//
+// - tags should be a dropdown.
+// - better layout for the ListComponents
+//
+// SECURITY
+//
+// - we should have users
+// - user logins should be required for creating recipes
+// - password reset page
+//
+// IMAGES
+//
+// We should be able to attach images to recipes, and they should render appropriately.
 
 #define COMMON_IMPLEMENTATION
 #include "common.h"
@@ -395,9 +404,6 @@ int setup_sqlite(char *fname)
 void init(char *fname)
 {
 	int rc;
-
-	// seed the rng machine if it hasn't been
-	pcg_seed(&localrand, time(NULL) ^ (long)printf, (unsigned long)init);
 
 	// setup libmagic
 	MAGIC_COOKIE = magic_open(MAGIC_MIME);
