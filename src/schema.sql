@@ -4,17 +4,28 @@
 -- Recipes Schema
 
 -- users: table that stores all of our users
+--
+-- I don't really know that this is a good idea, but for the moment, we're going to store the
+-- password as-is, and use an after-insert trigger on this to update the password and replace it
+-- with the hash...
+--
+-- Surely, this is a bad idea, but we'll start here and revise once we have the rest of the system
+-- in place.
 create table if not exists users (
     id             text not null default (uuid())
     , create_ts    text not null default (strftime('%Y%m%d-%H%M%f', 'now'))
     , update_ts    text null
     , delete_ts    text null
     , username     text not null
-    , email        text not null
     , password     text not null
-    , salt         text not null
-    , secret       text null -- ?
 );
+
+create trigger if not exists users_insert after insert on users
+begin
+    update users
+    set password = passwd(password)
+    where id = new.id;
+end;
 
 -- recipes: table to store our recipes
 create table if not exists recipes (

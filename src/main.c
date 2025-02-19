@@ -136,7 +136,6 @@ int main(int argc, char **argv)
 	shput(routes, "PUT /api/v1/recipe/:id", (void *)recipe_api_put);
 	shput(routes, "DELETE /api/v1/recipe/:id", (void *)recipe_api_delete);
 
-	shput(routes, "POST /api/v1/newuser", (void *)user_api_newuser);
 	shput(routes, "POST /api/v1/login", (void *)user_api_login);
 	shput(routes, "POST /api/v1/logout", (void *)user_api_logout);
 	shput(routes, "GET /api/v1/whoami", (void *)user_api_whoami);
@@ -389,6 +388,12 @@ int setup_sqlite(char *fname)
 		rc = sqlite3_load_extension(DATABASE, "./sqlite3_uuid", "sqlite3_uuid_init", &errmsg);
 		if (rc == SQLITE_ERROR) {
 			ERR("Error loading 'uuid' extension: %s\n", errmsg);
+			exit(1);
+		}
+
+		rc = sqlite3_load_extension(DATABASE, "./sqlite3_passwd", "sqlite3_passwd_init", &errmsg);
+		if (rc == SQLITE_ERROR) {
+			ERR("Error loading 'passwd' extension: %s\n", errmsg);
 			exit(1);
 		}
 

@@ -2,6 +2,11 @@
 // 2021-09-08 12:54:30
 //
 // User Functions
+//
+// NOTE (Brian)
+//
+// From within the webserver itself, new users cannot, and should not, be created. Mostly to ensure
+// that there's no security funniness.
 
 #include "common.h"
 
@@ -16,79 +21,20 @@
 #define COOKIE_KEY ("session")
 #define COOKIE_LEN (32)
 
-// newuser_verify : returns true if the new user record is valid
-int newuser_verify(UI_NewUser *newuser);
-
-// newuser_from_json : converts a JSON string into a NewUser object
-UI_NewUser *newuser_from_json(char *json);
-
 // user_from_session : takes the cookie, scans the user session table, returns user_id
 struct user_t *user_from_session(char *cookie);
 
-// newuser_add : adds the new user into the user table
-int newuser_add(UI_NewUser *newuser);
-
-// newuser_free : frees the new user 
-void newuser_free(UI_NewUser *newuser);
-
 // whoami_free : frees the strings and children, does not free this structure
-void whoami_free(UI_WhoAmI *who);
+void whoami_free(WhoAmI *who);
 
 // user_set_cookie : write the header to set the user cookie in 's'
 int user_set_cookie(char *s, char *id, size_t len);
 
 // user_to_whoami : converts a user structure to a whoami structure
-UI_WhoAmI *user_to_whoami(struct user_t *user);
+WhoAmI *user_to_whoami(struct user_t *user);
 
 // whoami_to_json : converts a WhoAmI structure to a json blob
-char *whoami_to_json(UI_WhoAmI *who);
-
-// user_api_newuser: endpoint, POST - /api/v1/newuser
-int user_api_newuser(struct mg_connection *conn, struct mg_http_message *hm)
-{
-	UI_NewUser *user;
-	char *json;
-	char cookie[BUFLARGE];
-
-	json = strndup(hm->body.ptr, hm->body.len);
-	if (json == NULL) { // return http error
-		ERR("message has no body\n");
-		return -1;
-	}
-
-	user = newuser_from_json(json);
-	if (user == NULL) {
-		ERR("couldn't convert body into a newuser record\n");
-		return -1;
-	}
-
-	free(json);
-
-	if (newuser_verify(user) < 0) {
-		ERR("user record invalid!\n");
-		newuser_free(user);
-		return -1;
-	}
-
-	int rc = newuser_add(user);
-	if (rc < 0) {
-		ERR("couldn't save the user to the disk!\n");
-		newuser_free(user);
-		return -1;
-	}
-
-	// TODO (Brian): set the user cookie here to whatever's in the user session
-	// NOT IMPLEMENTED
-#if 0
-	user_set_cookie(cookie, id, sizeof cookie);
-
-	mg_http_reply(conn, 200, cookie, "{\"id\":%lld}", id);
-#endif
-
-	newuser_free(user);
-
-	return 0;
-}
+char *whoami_to_json(WhoAmI *who);
 
 // user_api_login: endpoint, POST - /api/v1/user/login
 int user_api_login(struct mg_connection *conn, struct mg_http_message *hm)
@@ -105,7 +51,7 @@ int user_api_logout(struct mg_connection *conn, struct mg_http_message *hm)
 // user_api_whoami: endpoint, /api/v1/user/whoami
 int user_api_whoami(struct mg_connection *conn, struct mg_http_message *hm)
 {
-	UI_WhoAmI *who;
+	WhoAmI *who;
 	struct user_t *user;
 	struct mg_str *mg_cookie;
 	struct mg_str token;
@@ -144,7 +90,7 @@ int user_api_whoami(struct mg_connection *conn, struct mg_http_message *hm)
 }
 
 // user_to_whoami : converts a user structure to a whoami structure
-UI_WhoAmI *user_to_whoami(struct user_t *user)
+WhoAmI *user_to_whoami(struct user_t *user)
 {
 	// NOT IMPLEMENTED (Brian)
 	return NULL;
@@ -157,37 +103,8 @@ struct user_t *user_from_session(char *cookie)
 	return NULL;
 }
 
-// newuser_verify : returns false if the newuser doesn't pass validation
-int newuser_verify(UI_NewUser *newuser)
-{
-	// TODO (Brian)
-	//
-	// - server side email regex / email checking
-	// - server side validation needs to return errors
-
-	if (newuser == NULL)
-		return 0;
-
-	if (newuser->username == NULL || strlen(newuser->username) > 128)
-		return 0;
-
-	if (newuser->email == NULL || strlen(newuser->email) > 128)
-		return 0;
-
-	if (newuser->password == NULL || strlen(newuser->password) > 128)
-		return 0;
-
-	if (newuser->verify == NULL || strlen(newuser->verify) > 128)
-		return 0;
-
-	if (!streq(newuser->password, newuser->verify))
-		return 0;
-
-	return 1;
-}
-
 // newuser_add : adds the new user into the user table
-int newuser_add(UI_NewUser *newuser)
+int newuser_add(void)
 {
 	// NOT IMPLEMENTED
 	return -1;
@@ -306,70 +223,8 @@ int user_set_cookie(char *s, char *id, size_t len)
 #endif
 }
 
-// newuser_from_json : converts a JSON string into a NewUser object
-UI_NewUser *newuser_from_json(char *s)
-{
-	UI_NewUser *user;
-	json_t *root;
-	json_error_t error;
-
-	root = json_loads(s, 0, &error);
-	if (root == NULL) {
-		return NULL;
-	}
-
-	if (!json_is_object(root)) {
-		json_decref(root);
-		return NULL;
-	}
-
-	json_t *username, *email, *password, *verify;
-
-	// get all of the regular values first
-	username = json_object_get(root, "username");
-	if (!json_is_string(username)) {
-		json_decref(root);
-		return NULL;
-	}
-
-	email = json_object_get(root, "email");
-	if (!json_is_string(email)) {
-		json_decref(root);
-		return NULL;
-	}
-
-	password = json_object_get(root, "password");
-	if (!json_is_string(password)) {
-		json_decref(root);
-		return NULL;
-	}
-
-	verify = json_object_get(root, "verify");
-	if (!json_is_string(verify)) {
-		json_decref(root);
-		return NULL;
-	}
-
-	// now that we have all of the properties
-
-	user = calloc(1, sizeof(*user));
-	if (user == NULL) {
-		json_decref(root);
-		return NULL;
-	}
-
-	user->username = strdup(json_string_value(username));
-	user->email = strdup(json_string_value(email));
-	user->password = strdup(json_string_value(password));
-	user->verify = strdup(json_string_value(verify));
-
-	json_decref(root);
-
-	return user;
-}
-
 // whoami_to_json : converts a WhoAmI structure to a json blob
-char *whoami_to_json(UI_WhoAmI *who)
+char *whoami_to_json(WhoAmI *who)
 {
 	json_t *object;
 	json_error_t error;
@@ -393,20 +248,8 @@ char *whoami_to_json(UI_WhoAmI *who)
 	return json;
 }
 
-// newuser_free : frees the new user 
-void newuser_free(UI_NewUser *newuser)
-{
-	if (newuser) {
-		free(newuser->username);
-		free(newuser->email);
-		free(newuser->password);
-		free(newuser->verify);
-		free(newuser);
-	}
-}
-
 // login_free : frees the login 
-void login_free(UI_Login *login)
+void login_free(Login *login)
 {
 	if (login) {
 		free(login->username);
@@ -416,7 +259,7 @@ void login_free(UI_Login *login)
 }
 
 // whoami_free : frees the strings and children, does not free this structure
-void whoami_free(UI_WhoAmI *who)
+void whoami_free(WhoAmI *who)
 {
 	if (who) {
 		free(who->username);
