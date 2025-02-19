@@ -35,7 +35,7 @@ Login *login_from_json(char *json);
 // is_valid_login: returns true if a password verify succeeds, false if it fails
 static int is_valid_login(Login *login)
 {
-	char *query = "select passwd_verify(?) from users where username = ?;";
+	char *query = "select passwd_verify(?, password) from users where username = ?;";
 	int rc;
 	sqlite3_stmt *stmt;
 
@@ -47,6 +47,7 @@ static int is_valid_login(Login *login)
 
 	sqlite3_bind_text(stmt, 1, login->password, -1, NULL);
 	sqlite3_bind_text(stmt, 2, login->username, -1, NULL);
+	sqlite3_bind_text(stmt, 3, login->username, -1, NULL);
 
 	int is_valid = false;
 
@@ -105,7 +106,7 @@ failure:
 // create_user_session: create a user-session from a login (it's assumed the login is valid)
 UserSession *create_user_session(Login *login)
 {
-	char *insert_query = "insert into user_sessions (user_id) values (?);";
+	char *insert_query = "insert into user_sessions (user_row_id) select rowid from users where username = ?;";
 	int rc;
 	sqlite3_stmt *stmt;
 
@@ -118,8 +119,8 @@ UserSession *create_user_session(Login *login)
 	sqlite3_bind_text(stmt, 1, login->username, -1, NULL);
 
 	rc = sqlite3_step(stmt);
-	if (rc != SQLITE_ROW) {
-		// FAIL
+	if (rc != SQLITE_DONE) {
+		ERR("failed to create a 'user_sessions' record! %s", sqlite3_errmsg(DATABASE));
 		sqlite3_finalize(stmt);
 		return NULL;
 	}
@@ -128,7 +129,7 @@ UserSession *create_user_session(Login *login)
 
 	int64_t rowid = sqlite3_last_insert_rowid(DATABASE);
 
-	char *select_query = "select session_id, expire_ts from user_sessions where user_row_id = ?;";
+	char *select_query = "select session_id, expire_ts from user_sessions where rowid = ?;";
 
 	UserSession *session = calloc(1, sizeof(*session));
 
@@ -148,6 +149,53 @@ UserSession *create_user_session(Login *login)
 	sqlite3_finalize(stmt);
 
 	return session;
+}
+
+char *create_cookie_header(UserSession *session, bool secure)
+{
+	size_t header_len;
+	char *header = NULL;
+
+	// NOTE (brian) in our database, we generate SANE date formats (YYYYmmdd-HHMMSS.FFF). However,
+	// according to RFC-6265 (HTTP State Management Mechanism), we need to use an RFC-1126 date
+	// (Requirements for Internet Hosts -- Application and Support), which is defined in RFC-2616
+	// (Hypertext Transport Protocol -- HTTP/1.1).
+	//
+	// To do this, we convert between our good format using good old time.h, and read out the
+	// date format this this cookie will need.
+	//
+	// - https://www.rfc-editor.org/rfc/rfc6265#section-4.1.1
+	// - https://www.rfc-editor.org/rfc/rfc1123
+	// - https://www.rfc-editor.org/rfc/rfc2616#section-3.3.1
+
+	// NOTE (brian) this currently throws away the fractional part of the time string that we have.
+
+	struct tm expires = { 0 };
+	char *rv = strptime(session->expire_ts, "%Y%m%d-%H%M%S", &expires);
+	if (rv == NULL) {
+		ERR("could not parse the expire_ts on the user session!");
+		return NULL;
+	}
+
+	time_t expires_time = mktime(&expires);
+	if (gmtime_r(&expires_time, &expires) == NULL) {
+		ERR("could not convert the expires time to UTC!");
+		return NULL;
+	}
+
+	char expires_str[32] = { 0 };
+	strftime(expires_str, sizeof expires_str, "%a %b %d %T %Y", &expires);
+
+	FILE *fp = open_memstream(&header, &header_len);
+	// TODO (brian) determine how we can tell if we're serving the site over http or https?
+	fprintf(fp, "Set-Cookie: Session=%s; Expires=%s; %sHttpOnly\r\n",
+		session->session_id,
+		expires_str,
+		secure ? "Secure; " : ""
+	);
+	fclose(fp);
+
+	return header;
 }
 
 // user_api_login: endpoint, POST - /api/v1/user/login
@@ -177,11 +225,20 @@ int user_api_login(struct mg_connection *conn, struct mg_http_message *hm)
 	// upon any session token usage will refresh and give another week of existing.
 
 	UserSession *session = create_user_session(login);
+	if (session == NULL) {
+		ERR("could not create a valid user session!");
+		mg_http_reply(conn, 500, NULL, "{\"error\":\"internal error!\"}");
+		login_free(login);
+		return -1;
+	}
 
-	mg_http_reply(conn, 200, NULL, "{\"session_id\":\"\",\"expire_ts\":\"\"}",
-		session->session_id, session->expire_ts);
+	char *header = create_cookie_header(session, false);
 
+	mg_http_reply(conn, 200, header, "{\"session_id\":\"%s\",\"expire_ts\":\"%s\"}", session->session_id, session->expire_ts);
+
+	free(header);
 	user_session_free(session);
+	login_free(login);
 
 	return 0;
 }

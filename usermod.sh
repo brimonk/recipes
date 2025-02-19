@@ -15,8 +15,6 @@ function sqlite3_exec {
 }
 
 if [ "$COMMAND" = "insert" ]; then
-	echo "insert"
-
 	USERNAME=""
 	PASSWORD=""
 
@@ -37,16 +35,9 @@ if [ "$COMMAND" = "insert" ]; then
 			echo "'Password' must be a non-empty string"
 		fi
 	done
-
-	echo $USERNAME $PASSWORD
-
-	# HASH PASSWORD HERE
 
 	sqlite3_exec "insert into users (username, password) values ('$USERNAME', '$PASSWORD');"
-
 elif [ "$COMMAND" = "update" ]; then
-	echo "update"
-
 	USERNAME=""
 	PASSWORD=""
 
@@ -68,10 +59,7 @@ elif [ "$COMMAND" = "update" ]; then
 		fi
 	done
 
-	# HASH PASSWORD HERE
-
-	sqlite3_exec "update users set password = \'$PASSWORD\' where username = \'$USERNAME\'";
-
+	sqlite3_exec "update users set password = '$PASSWORD' where username = '$USERNAME';"
 elif [ "$COMMAND" = "select" ]; then
 	echo "select"
 
@@ -90,7 +78,7 @@ elif [ "$COMMAND" = "delete" ]; then
 	read CONFIRM
 
 	if [[ "$CONFIRM" -eq "Y" ]] || [[ "$CONFIRM" -eq "y" ]]; then
-		sqlite3_exec "delete from users where username = \'$USERNAME\';"
+		sqlite3_exec "delete from users where username = '$USERNAME';"
 	fi
 else
 	echo "UNKNOWN COMMAND ${COMMAND}"

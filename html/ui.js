@@ -1031,6 +1031,14 @@ function LoginComponent(inivialVnode) {
         context: "login"
     };
 
+    function scrubMe(u) {
+        const scrubbed = {
+            username: u.username,
+            password: u.password,
+        };
+        return scrubbed;
+    }
+
     FetchStaticData();
 
     return {
@@ -1044,8 +1052,14 @@ function LoginComponent(inivialVnode) {
             });
 
             let buttons = [
-                ButtonPrimary("Login", (e) => {
-                    console.log("LOG ME IN!!");
+                ButtonPrimary("Login", (x) => {
+                    m.request({
+                        method: "POST",
+                        url: `/api/v1/login`,
+                        body: scrubMe(user),
+                    }).then((x) => {
+                        m.route.set(`/`);
+                    }).catch((err) => console.error(err));
                 }),
                 Button("Cancel", (e) => m.route.set("/"))
             ];

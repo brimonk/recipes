@@ -35,8 +35,8 @@ static void sqlite3_passwd_verify(sqlite3_context *context, int argc, sqlite3_va
 
     switch (sqlite3_value_type(argv[0])) {
         case SQLITE_TEXT: {
-            const unsigned char *hash = sqlite3_value_text(argv[0]);
-            const unsigned char *passwd = sqlite3_value_text(argv[1]);
+            const unsigned char *passwd = sqlite3_value_text(argv[0]);
+            const unsigned char *hash = sqlite3_value_text(argv[1]);
 
             int rc = crypto_pwhash_str_verify(
                 (const char *)hash,

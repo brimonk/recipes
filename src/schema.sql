@@ -29,6 +29,13 @@ begin
     where id = new.id;
 end;
 
+create trigger if not exists users_update after update on users
+begin
+    update users
+    set password = passwd(password)
+    where old.id = new.id;
+end;
+
 create table if not exists user_sessions (
     user_row_id    int not null
     , session_id   text not null default (uuid())

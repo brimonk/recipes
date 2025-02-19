@@ -22,8 +22,9 @@
  * 1. this file should replace the c standard library - avoids a gross dependency
  */
 
+#define __USE_XOPEN
+#define _GNU_SOURCE
 #include <stdio.h>
-
 #include <stddef.h>
 #include <stdint.h>
 #include <stdarg.h>
