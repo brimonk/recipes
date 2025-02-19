@@ -20,12 +20,22 @@ create table if not exists users (
     , password     text not null
 );
 
+create unique index if not exists users_idx on users (username);
+
 create trigger if not exists users_insert after insert on users
 begin
     update users
     set password = passwd(password)
     where id = new.id;
 end;
+
+create table if not exists user_sessions (
+    user_row_id    int not null
+    , session_id   text not null default (uuid())
+    , create_ts    text not null default (strftime('%Y%m%d-%H%M%f', 'now'))
+    , expire_ts    text not null default (strftime('%Y%m%d-%H%M%f', 'now', '+7 days'))
+    , foreign key (user_row_id) references users(rowid)
+);
 
 -- recipes: table to store our recipes
 create table if not exists recipes (

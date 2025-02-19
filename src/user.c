@@ -11,6 +11,7 @@
 #include "common.h"
 
 #include "mongoose.h"
+#include "sqlite3.h"
 
 #include <sodium.h>
 #include <jansson.h>
@@ -21,206 +22,175 @@
 #define COOKIE_KEY ("session")
 #define COOKIE_LEN (32)
 
-// user_from_session : takes the cookie, scans the user session table, returns user_id
-struct user_t *user_from_session(char *cookie);
+extern sqlite3 *DATABASE;
 
-// whoami_free : frees the strings and children, does not free this structure
-void whoami_free(WhoAmI *who);
+// login_free: frees a login object
+static void login_free(Login *login);
 
-// user_set_cookie : write the header to set the user cookie in 's'
-int user_set_cookie(char *s, char *id, size_t len);
+static void user_session_free(UserSession *session);
 
-// user_to_whoami : converts a user structure to a whoami structure
-WhoAmI *user_to_whoami(struct user_t *user);
+// login_from_json: parses a 'Login' request from some JSON input
+Login *login_from_json(char *json);
 
-// whoami_to_json : converts a WhoAmI structure to a json blob
-char *whoami_to_json(WhoAmI *who);
+// is_valid_login: returns true if a password verify succeeds, false if it fails
+static int is_valid_login(Login *login)
+{
+	char *query = "select passwd_verify(?) from users where username = ?;";
+	int rc;
+	sqlite3_stmt *stmt;
+
+	rc = sqlite3_prepare_v2(DATABASE, query, -1, &stmt, NULL);
+	if (rc != SQLITE_OK) {
+		ERR("%s", sqlite3_errmsg(DATABASE));
+		return false;
+	}
+
+	sqlite3_bind_text(stmt, 1, login->password, -1, NULL);
+	sqlite3_bind_text(stmt, 2, login->username, -1, NULL);
+
+	int is_valid = false;
+
+	if ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+		int tmp = sqlite3_column_int(stmt, 0);
+		if (tmp) {
+			is_valid = true;
+		}
+	}
+
+	sqlite3_finalize(stmt);
+
+	return is_valid;
+}
+
+// user_select: returns a user object
+User *user_select(char *username)
+{
+	User *user = calloc(1, sizeof(*user));
+	if (user == NULL) {
+		return NULL;
+	}
+
+	char *query = "select id from users where username = ?;";
+	int rc;
+	sqlite3_stmt *stmt;
+	char *id = NULL;
+
+	rc = sqlite3_prepare_v2(DATABASE, query, -1, &stmt, NULL);
+	if (rc != SQLITE_OK) {
+		ERR("%s", sqlite3_errmsg(DATABASE));
+		goto failure;
+	}
+
+	sqlite3_bind_text(stmt, 1, username, -1, NULL);
+
+	if ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+		id = strdup((char *)sqlite3_column_text(stmt, 0));
+	} else {
+		goto failure;
+	}
+
+	sqlite3_finalize(stmt);
+
+	db_load_metadata_from_id(&user->metadata, "users", id);
+
+	return user;
+
+failure:
+	if (user) free(user);
+	if (stmt) sqlite3_finalize(stmt);
+	if (id) free(id);
+	return NULL;
+}
+
+// create_user_session: create a user-session from a login (it's assumed the login is valid)
+UserSession *create_user_session(Login *login)
+{
+	char *insert_query = "insert into user_sessions (user_id) values (?);";
+	int rc;
+	sqlite3_stmt *stmt;
+
+	rc = sqlite3_prepare_v2(DATABASE, insert_query, -1, &stmt, NULL);
+	if (rc != SQLITE_OK) {
+		ERR("%s", sqlite3_errmsg(DATABASE));
+		return false;
+	}
+
+	sqlite3_bind_text(stmt, 1, login->username, -1, NULL);
+
+	rc = sqlite3_step(stmt);
+	if (rc != SQLITE_ROW) {
+		// FAIL
+		sqlite3_finalize(stmt);
+		return NULL;
+	}
+
+	sqlite3_finalize(stmt);
+
+	int64_t rowid = sqlite3_last_insert_rowid(DATABASE);
+
+	char *select_query = "select session_id, expire_ts from user_sessions where user_row_id = ?;";
+
+	UserSession *session = calloc(1, sizeof(*session));
+
+	rc = sqlite3_prepare_v2(DATABASE, select_query, -1, &stmt, NULL);
+	if (rc != SQLITE_OK) {
+		ERR("%s", sqlite3_errmsg(DATABASE));
+		return false;
+	}
+
+	sqlite3_bind_int64(stmt, 1, rowid);
+
+	if ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+		session->session_id = strdup((char *)sqlite3_column_text(stmt, 0));
+		session->expire_ts = strdup((char *)sqlite3_column_text(stmt, 1));
+	}
+
+	sqlite3_finalize(stmt);
+
+	return session;
+}
 
 // user_api_login: endpoint, POST - /api/v1/user/login
 int user_api_login(struct mg_connection *conn, struct mg_http_message *hm)
 {
+	struct Login *login;
+	char *body;
+
+	body = strndup(hm->body.ptr, hm->body.len);
+	login = login_from_json(body);
+	free(body);
+
+	if (login == NULL) {
+		ERR("couldn't parse user from json!");
+		return -1;
+	}
+
+	if (!is_valid_login(login)) {
+		ERR("invalid login!");
+		mg_http_reply(conn, 403, NULL, "{\"error\":\"invalid login!\"}");
+		login_free(login);
+		return -1;
+	}
+
+	// If we have a valid login, at this point we need to create a session cookie, set this in a
+	// header, and return a success to the user. Our session cookies will last for 1 week, and
+	// upon any session token usage will refresh and give another week of existing.
+
+	UserSession *session = create_user_session(login);
+
+	mg_http_reply(conn, 200, NULL, "{\"session_id\":\"\",\"expire_ts\":\"\"}",
+		session->session_id, session->expire_ts);
+
+	user_session_free(session);
+
 	return 0;
 }
 
 // user_api_logout: endpoint, POST - /api/v1/user/logout
 int user_api_logout(struct mg_connection *conn, struct mg_http_message *hm)
 {
+	// TODO (brian) delete the user session record, and wipe the cookie in the response
 	return 0;
-}
-
-// user_api_whoami: endpoint, /api/v1/user/whoami
-int user_api_whoami(struct mg_connection *conn, struct mg_http_message *hm)
-{
-	WhoAmI *who;
-	struct user_t *user;
-	struct mg_str *mg_cookie;
-	struct mg_str token;
-	char *cookie;
-	char *json;
-
-	mg_cookie = mg_http_get_header(hm, "Cookie");
-	if (mg_cookie == NULL) {
-		return -1; // cookie must be present
-	}
-
-	token = mg_http_get_header_var(*mg_cookie, mg_str("session"));
-	cookie = strndup(token.ptr, token.len);
-
-	user = user_from_session(cookie);
-	if (user == NULL) {
-		free(cookie);
-		return -1;
-	}
-
-	who = user_to_whoami(user);
-	if (user == NULL) {
-		free(cookie);
-		return -1;
-	}
-
-	json = whoami_to_json(who);
-
-	mg_http_reply(conn, 200, NULL, json);
-
-	whoami_free(who);
-	free(cookie);
-	free(json);
-
-	return 0;
-}
-
-// user_to_whoami : converts a user structure to a whoami structure
-WhoAmI *user_to_whoami(struct user_t *user)
-{
-	// NOT IMPLEMENTED (Brian)
-	return NULL;
-}
-
-// user_from_session : takes the cookie, scans the user session table, returns user_id
-struct user_t *user_from_session(char *cookie)
-{
-	// NOT IMPLEMENTED (Brian)
-	return NULL;
-}
-
-// newuser_add : adds the new user into the user table
-int newuser_add(void)
-{
-	// NOT IMPLEMENTED
-	return -1;
-#if 0
-	user_t *user_record;
-	int rc;
-
-	string_128_t *username;
-	string_128_t *email;
-	string_128_t *password;
-	string_128_t *salt;
-	string_128_t *session_secret;
-
-	unsigned char tbuf[BUFSMALL];
-
-	// NOTE (Brian): There's a lot that's going on in here, and I hope I can convey it all to you
-	// (me).
-	//
-	// First, clearly, we store the username and email address in plain text. I feel like there's a
-	// universe where you may be able to hash those, but I'm not sure. Especially if you want to put
-	// who created the recipe with the recipe, that begins to be kind of hard.
-	//
-	// After those are stored, we have to deal with the user's password.
-	//
-	// To adequately handle this with our crypto library, look at this page:
-	//
-	//     https://doc.libsodium.org/password_hashing
-	//
-	// To store a User record, you must
-	//
-	//     - generate random bytes to be used as the salt
-	//     - take the salt and the user's plaintext password and derive a key
-	//     - store the key
-	//
-	// You can use the entered password, the key, and the salt to determine if the password is
-	// what's in the key, later (?).
-	//
-	// So, here, we generate the secret, and hash the password to be used as the key for later.
-	//
-	// However, once we've done that, we need to also add a UserSession record for the user.
-	// As of now, we use the OBJECT_FLAG_LOCKED flag on the usersession_t object to denote if the
-	// user's session is used.
-	//
-	// FURTHER NOTES
-	//
-	// The documentation for libsodium suggests to store all of the parameters for crypto_pwhash
-	// together.
-
-	user_record = store_addobj(RT_USER);
-
-	username = store_addobj(RT_STRING128);
-	strncpy(username->string, newuser->username, sizeof(username->string));
-	user_record->username = username->base.id;
-
-	email = store_addobj(RT_STRING128);
-	strncpy(email->string, newuser->email, sizeof(email->string));
-	user_record->email = email->base.id;
-
-	// REMOVE ME
-	assert(sizeof(salt->string) <= crypto_pwhash_STRBYTES);
-
-	password = store_addobj(RT_STRING128);
-	user_record->password = password->base.id;
-
-	salt = store_addobj(RT_STRING128);
-	randombytes_buf(salt->string, sizeof(salt->string));
-	user_record->salt = salt->base.id;
-
-	rc = crypto_pwhash(
-		(unsigned char *)password->string, sizeof(password->string),
-		newuser->password, strlen(newuser->password),
-		(unsigned char *)salt->string,
-		crypto_pwhash_OPSLIMIT_INTERACTIVE,
-		crypto_pwhash_MEMLIMIT_INTERACTIVE,
-		crypto_pwhash_ALG_DEFAULT
-		);
-
-	// TODO (Brian): replace with an 'if' that returns some kind of server error
-	assert(rc == 0);
-
-	randombytes_buf(tbuf, COOKIE_LEN);
-
-	session_secret = store_addobj(RT_STRING128);
-	user_record->session_secret = session_secret->base.id;
-
-	sodium_bin2base64(session_secret->string, sizeof(session_secret->string),
-		tbuf, COOKIE_LEN, sodium_base64_VARIANT_URLSAFE_NO_PADDING);
-
-	return user_record->base.id;
-#endif
-}
-
-// user_set_cookie : write the header to set the user cookie in 's'
-int user_set_cookie(char *s, char *id, size_t len)
-{
-	// NOT IMPLEMENTED (Brian)
-	return -1;
-#if 0
-	user_t *user;
-	string_128_t *secret;
-	string_128_id secret_id;
-
-	user = store_getobj(RT_USER, id);
-	if (user == NULL) {
-		return 0;
-	}
-
-	secret_id = user->session_secret;
-
-	secret = store_getobj(RT_STRING128, secret_id);
-	if (secret == NULL) {
-		return 0;
-	}
-
-	return snprintf(s, len, "Set-Cookie: %s=%s; SameSite=Strict; HttpOnly\r\n", COOKIE_KEY, secret->string);
-#endif
 }
 
 // whoami_to_json : converts a WhoAmI structure to a json blob
@@ -248,13 +218,39 @@ char *whoami_to_json(WhoAmI *who)
 	return json;
 }
 
+// login_from_json: parses a 'Login' request from some JSON input
+Login *login_from_json(char *json)
+{
+	json_error_t error;
+
+	Login *login = calloc(1, sizeof(*login));
+	if (login != NULL) {
+		json_t *object = json_loads(json, 0, &error);
+		if (json_is_object(object)) {
+			login->username = strdup(json_string_value(json_object_get(object, "username")));
+			login->password = strdup(json_string_value(json_object_get(object, "password")));
+		}
+		json_decref(object);
+	}
+	return login;
+}
+
 // login_free : frees the login 
-void login_free(Login *login)
+static void login_free(Login *login)
 {
 	if (login) {
 		free(login->username);
 		free(login->password);
 		free(login);
+	}
+}
+
+static void user_session_free(UserSession *session)
+{
+	if (session) {
+		free(session->session_id);
+		free(session->expire_ts);
+		free(session);
 	}
 }
 

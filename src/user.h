@@ -15,18 +15,24 @@ typedef struct Login {
     char *password;
 } Login;
 
+typedef struct User {
+	DB_Metadata metadata;
+	char *username;
+	char *password; // at this point, it's a hash
+} User;
+
+// UserSession : this data gets concatenated with a ":", and base64 encoded, and stored in a cookie
+// This is what we use to determine if a user is who they say they are, and so on.
+typedef struct UserSession {
+	char *session_id;
+	char *expire_ts;
+} UserSession;
+
 typedef struct WhoAmI {
     char *id;
     char *username;
     char *email;
 } WhoAmI;
-
-// UserSession : this data gets concatenated with a ":", and base64 encoded, and stored in a cookie
-// This is what we use to determine if a user is who they say they are, and so on.
-typedef struct UserSession {
-    char *id;
-    char *secret;
-} UserSession;
 
 // user_api_newuser: endpoint, /api/v1/user/create
 int user_api_newuser(struct mg_connection *conn, struct mg_http_message *hm);
