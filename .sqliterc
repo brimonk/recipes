@@ -1,0 +1,2 @@
+.load ./sqlite3_uuid.so sqlite3_uuid_init
+.load ./sqlite3_passwd.so sqlite3_passwd_init
