@@ -1,8 +1,6 @@
 // Brian Chrzanowski
 // 2021-09-07 01:17:08
 
-const EMAIL_REGEX = /^(([^<>()[\]\\.,;:\s@\"]+(\.[^<>()[\]\\.,;:\s@\"]+)*)|(\".+\"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;
-
 let staticData = null;
 
 let user = null;
@@ -28,7 +26,7 @@ function FetchStaticData() {
     if (!staticData) {
         m.request({
             method: "GET",
-            url: `/api/v1/static`,
+            url: `/static.json`,
         }).then((x) => {
             staticData = x;
         }).catch((err) => {
@@ -143,7 +141,7 @@ function InputComponent(vnode) {
     // (integer / float) on the referenced object, but we kinda dropped that when everything
     // effectively became a string.
 
-    const types = [ "text", "email", "password" ];
+    const types = [ "text", "password" ];
 
     if (!type) {
         type = "text";
@@ -166,10 +164,6 @@ function InputComponent(vnode) {
 
                     if (maxlen < (value?.length ?? 0)) {
                         value = value.substr(0, maxlen);
-                    }
-
-                    if (type === "email") {
-                        value = value.replace(/ /g, "");
                     }
 
                     object[prop] = value;
@@ -363,8 +357,8 @@ function MenuComponent(vnode) {
                         }, "New Recipe")),
 
                         m("td", { class: "mui--appbar-height", align: "right" }, m(m.route.Link, {
-                            href: "/newuser", style: "color: white"
-                        }, "New User / Login")),
+                            href: "/login", style: "color: white"
+                        }, "Login")),
                     ])
                 )
             );
@@ -899,8 +893,6 @@ class User {
     constructor(context = "data") {
         this.username = "";
         this.password = "";
-        this.email = "";
-        this.verify = "";
 
         this.context = context;
 
@@ -919,14 +911,6 @@ class User {
 
     setPassword(value) {
         this.password = value;
-    }
-
-    setEmail(value) {
-        this.email = value;
-    }
-
-    setVerify(value) {
-        this.verify = value;
     }
 
     setContext(value) {
@@ -949,8 +933,6 @@ class User {
         const data = {
             username: this.username,
             password: this.password,
-            verify: this.verify,
-            email: this.email,
         };
 
         return m.request({
@@ -1053,8 +1035,8 @@ function LoginComponent(inivialVnode) {
 
     return {
         view: function(vnode) {
-            let email = m(InputComponent, {
-                object: user, prop: "email", label: "Email", type: "email", maxlen: 128
+            let username = m(InputComponent, {
+                object: user, prop: "username", label: "Username", type: "text", maxlen: 128
             });
 
             let password = m(InputComponent, {
@@ -1073,70 +1055,8 @@ function LoginComponent(inivialVnode) {
 
                 m("div", { class: "mui-container-fluid" }, [
                     m("div", { class: "mui-row" }, [ m("div", { class: "mui-col-md-12" }, H2("Login"),) ]),
-                    m("div", { class: "mui-row" }, [ m("div", { class: "mui-col-md-12" }, email) ]),
-                    m("div", { class: "mui-row" }, [ m("div", { class: "mui-col-md-12" }, password) ]),
-                ]),
-
-                DIV(buttons),
-
-                P(StaticDataOrBlank(staticData?.cookieDisclaimer)),
-            ];
-        },
-    };
-}
-
-// New User Component
-function NewUserComponent(vnode) {
-    const user = {
-        context: "newuser"
-    };
-
-    FetchStaticData();
-
-    return {
-        view: function(vnode) {
-            let username = m(InputComponent, {
-                object: user, prop: "username", label: "Username", maxlen: 128
-            });
-
-            let email = m(InputComponent, {
-                object: user, prop: "email", label: "Email", type: "email", maxlen: 128
-            });
-
-            let password = m(InputComponent, {
-                object: user, prop: "password", label: "Password", type: "password", maxlen: 128
-            });
-
-            let verify = m(InputComponent, {
-                object: user, prop: "verify", label: "Verify Password", type: "password", maxlen: 128
-            });
-
-            let buttons = [
-                ButtonPrimary("Create", (e) => {
-                    m.request({
-                        method: "POST",
-                        url: "/api/v1/newuser",
-                        body: user,
-                    }).then((x) => {
-                        RefreshUserObject();
-                        m.route.set("/");
-                        console.log(x);
-                    }).catch((err) => {
-                        InvalidateUserObject();
-                    });
-                }),
-                Button("Cancel", (e) => m.route.set("/"))
-            ];
-
-            return [
-                m(MenuComponent),
-
-                m("div", { class: "mui-container-fluid" }, [
-                    m("div", { class: "mui-row" }, [ m("div", { class: "mui-col-md-12" }, H2("New User"),) ]),
                     m("div", { class: "mui-row" }, [ m("div", { class: "mui-col-md-12" }, username) ]),
-                    m("div", { class: "mui-row" }, [ m("div", { class: "mui-col-md-12" }, email) ]),
                     m("div", { class: "mui-row" }, [ m("div", { class: "mui-col-md-12" }, password) ]),
-                    m("div", { class: "mui-row" }, [ m("div", { class: "mui-col-md-12" }, verify) ]),
                 ]),
 
                 DIV(buttons),
@@ -1152,7 +1072,6 @@ var root = document.body;
 
 const routes = {
     "/": HomeComponent,
-    "/newuser": NewUserComponent,
     "/login": LoginComponent,
 
     "/recipe/new": RecipeEditComponent,
