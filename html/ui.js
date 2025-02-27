@@ -2,7 +2,6 @@
 // 2021-09-07 01:17:08
 
 let staticData = null;
-
 let user = null;
 
 function RefreshUserObject() {
@@ -13,6 +12,8 @@ function RefreshUserObject() {
         user = x;
     }).catch((err) => {
         // console.warn("We tried to fetch the user record, but we haven't been authenticated yet.")
+    }).finally(() => {
+        m.redraw();
     });
 }
 
@@ -342,6 +343,8 @@ function ListComponent(vnode) {
 
 // MenuComponent : draws the menu at the top(ish) of the screen
 function MenuComponent(vnode) {
+    RefreshUserObject();
+
     return {
         view: function(vnode) {
             return m("div", { class: "mui-appbar", style: "padding: 0 2em" }, 
