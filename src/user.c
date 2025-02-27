@@ -245,11 +245,15 @@ int user_api_login(struct mg_connection *conn, struct mg_http_message *hm)
 // user_api_logout: endpoint, POST - /api/v1/logout
 int user_api_logout(struct mg_connection *conn, struct mg_http_message *hm)
 {
-	// TODO (brian) delete the user session record, and wipe the cookie in the response
+	struct mg_str *cookies = mg_http_get_header(hm, "Cookie");
+	if (cookies == NULL) {
+		mg_http_reply(conn, 200, NULL, "logout successful - not logged in");
+		return 0;
+	}
 
-	struct mg_str *session = mg_http_get_header(hm, SESSION_KEY);
+	struct mg_str session = mg_http_get_header_var(*cookies, mg_str(SESSION_KEY));
+
 	do {
-	if (session != NULL) {
 		char *delete_query = "delete from user_sessions where session_id = ?;";
 
 		autofree_stmt sqlite3_stmt *stmt = NULL;
@@ -257,27 +261,22 @@ int user_api_logout(struct mg_connection *conn, struct mg_http_message *hm)
 
 		rc = sqlite3_prepare_v2(DATABASE, delete_query, -1, &stmt, NULL);
 		if (rc != SQLITE_OK) {
-			ERR("could not remove user session with id '%.s' from the database.",
-				session->ptr,
-				session->len
-			);
+			ERR("could not remove user session with id '%.s' from the database.", session.ptr, session.len);
 			break;
 		}
 
-		sqlite3_bind_text(stmt, 1, session->ptr, session->len, NULL);
+		sqlite3_bind_text(stmt, 1, session.ptr, session.len, NULL);
 
 		rc = sqlite3_step(stmt);
 		if (rc != SQLITE_DONE) {
-			ERR("could not remove user session with id '%.s' from the database.",
-				session->ptr,
-				session->len
-			);
+			ERR("could not remove user session with id '%.s' from the database.", session.ptr, session.len);
 		}
-	}
 	}
 	while (0);
 
-	// NOTE (brian) we always succeed on a logout, even if we can't wipe the record for some reason
+	// NOTE (brian) the standards compliant way to REMOVE a cookie is to give it a bogus value,
+	// and expire it in the past.
+
 	mg_http_reply(conn, 200, NULL, "");
 
 	return 0;
@@ -286,7 +285,44 @@ int user_api_logout(struct mg_connection *conn, struct mg_http_message *hm)
 // user_api_whoami: endpoint, GET - /api/v1/whoami
 int user_api_whoami(struct mg_connection *conn, struct mg_http_message *hm)
 {
-	// read from the Session cookie, and return the corresponding user_id for this session id.
+	struct mg_str *cookies = mg_http_get_header(hm, "Cookie");
+	if (cookies == NULL) {
+		mg_http_reply(conn, 401, NULL, "");
+		return 0;
+	}
+
+	struct mg_str session = mg_http_get_header_var(*cookies, mg_str(SESSION_KEY));
+
+	autofree char *user_id = NULL;
+
+	do {
+		MSG("Getting user_id for session: %.*s", session.len, session.ptr);
+
+		char *select_query = "select u.id from users u inner join user_sessions us on u.rowid = us.user_row_id where us.session_id = ?;";
+
+		autofree_stmt sqlite3_stmt *stmt = NULL;
+		int rc = 0;
+
+		rc = sqlite3_prepare_v2(DATABASE, select_query, -1, &stmt, NULL);
+		if (rc != SQLITE_OK) {
+			ERR("could not prepare statement!");
+			break;
+		}
+
+		sqlite3_bind_text(stmt, 1, session.ptr, session.len, NULL);
+
+		if ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+			user_id = strdup((char *)sqlite3_column_text(stmt, 0));
+		}
+	}
+	while (0);
+
+	if (user_id == NULL) {
+		mg_http_reply(conn, 401, NULL, "");
+	} else {
+		mg_http_reply(conn, 200, NULL, "{\"id\":\"%s\"}", user_id);
+	}
+
 	return 0;
 }
 

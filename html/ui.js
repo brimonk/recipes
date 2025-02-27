@@ -4,17 +4,23 @@
 let staticData = null;
 let user = null;
 
+// RefreshUserObject : called from the menu component (mostly global) to determine who we are
 function RefreshUserObject() {
     m.request({
         method: "GET",
         url: `/api/v1/whoami`
     }).then((x) => {
         user = x;
-    }).catch((err) => {
-        // console.warn("We tried to fetch the user record, but we haven't been authenticated yet.")
-    }).finally(() => {
         m.redraw();
+    }).catch((err) => {
+        console.warn("We tried to fetch the user record, but we haven't been authenticated yet.")
     });
+}
+
+// ResetUserObject : supposed to be called from the logout button
+function ResetUserObject() {
+    user = null;
+    m.redraw();
 }
 
 // InvalidateUserObject : just sets the 'user' object to be null
@@ -343,10 +349,33 @@ function ListComponent(vnode) {
 
 // MenuComponent : draws the menu at the top(ish) of the screen
 function MenuComponent(vnode) {
-    RefreshUserObject();
 
     return {
         view: function(vnode) {
+            if (user == null) {
+                RefreshUserObject();
+            }
+
+            let login_logout_component = null;
+
+            if (user == null) {
+                login_logout_component = m("td", { class: "mui--appbar-height", align: "right" },
+                    m(m.route.Link, { href: "/login", style: "color: white" }, "Login"));
+            } else {
+                login_logout_component = m("td", { class: "mui--appbar-height", align: "right" },
+                    m("a", {
+                        style: "color: white",
+                        onclick: () => {
+                            m.request({
+                                method: "POST",
+                                url: `/api/v1/logout`,
+                            }).then((x) => {
+                                ResetUserObject();
+                            });
+                        },
+                    }, "Logout"));
+            }
+
             return m("div", { class: "mui-appbar", style: "padding: 0 2em" }, 
                 m("table", { width: "100%" },
                     m("tr", { style: "vertical-align:middle" }, [
@@ -359,9 +388,7 @@ function MenuComponent(vnode) {
                             href: "/recipe/new", style: "color: white"
                         }, "New Recipe")),
 
-                        m("td", { class: "mui--appbar-height", align: "right" }, m(m.route.Link, {
-                            href: "/login", style: "color: white"
-                        }, "Login")),
+                        login_logout_component
                     ])
                 )
             );
@@ -978,8 +1005,8 @@ class User {
     }
 }
 
+// TODO (brian) remove
 function UserValidate(user) {
-    // TODO (Brian) add in validation logic
 
     const errors = [];
 

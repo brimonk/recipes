@@ -138,6 +138,7 @@ int main(int argc, char **argv)
 
 	shput(routes, "POST /api/v1/login", (void *)user_api_login);
 	shput(routes, "POST /api/v1/logout", (void *)user_api_logout);
+	shput(routes, "GET /api/v1/whoami", (void *)user_api_whoami);
 
 	shput(routes, "GET /api/v1/tags", (void *)tag_api_getlist);
 

@@ -191,12 +191,15 @@ enum {
 // NOTE (Brian): LOG is taken up by mongoose, and I really don't want to hack that together
 // #define LOG(fmt, ...) (c_fprintf(__FILE__, __LINE__, __FUNCTION__, LOG_LOG, stderr, fmt, ##__VA_ARGS__)) // basic log message
 #define MSG(fmt, ...) (c_fprintf(__FILE__, __LINE__, __FUNCTION__, LOG_MSG, stderr, fmt "\n", ##__VA_ARGS__)) // basic log message
+#define INF(fmt, ...) (c_fprintf(__FILE__, __LINE__, __FUNCTION__, LOG_MSG, stderr, fmt "\n", ##__VA_ARGS__)) // basic log message
 #define WRN(fmt, ...) (c_fprintf(__FILE__, __LINE__, __FUNCTION__, LOG_WRN, stderr, fmt "\n", ##__VA_ARGS__)) // warning message
 #define ERR(fmt, ...) (c_fprintf(__FILE__, __LINE__, __FUNCTION__, LOG_ERR, stderr, fmt "\n", ##__VA_ARGS__)) // error message
 #define DBG(fmt, ...) (c_fprintf(__FILE__, __LINE__, __FUNCTION__, LOG_DBG, stderr, fmt "\n", ##__VA_ARGS__)) // verbose message
 
 #define autofree    __attribute__((cleanup(cleanup_free)))
+void cleanup_free(void *p);
 #define autofreearr __attribute__((cleanup(cleanup_free_arr)))
+void cleanup_free_arr(void *p);
 
 #if defined(COMMON_IMPLEMENTATION)
 
@@ -642,7 +645,7 @@ void pcg_seed(struct pcgrand_t *rng, u64 initstate, u64 initseq)
 #include "stb_ds.h"
 
 
-#ifdef COMMON_IMPLMENTATION
+#ifdef COMMON_IMPLEMENTATION
 void cleanup_free(void *p)
 {
     free(*(void **)p);
