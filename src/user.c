@@ -19,8 +19,7 @@
 #include "user.h"
 #include "objects.h"
 
-#define COOKIE_KEY ("session")
-#define COOKIE_LEN (32)
+#define SESSION_KEY "session"
 
 extern sqlite3 *DATABASE;
 
@@ -188,7 +187,7 @@ char *create_cookie_header(UserSession *session, bool secure)
 
 	FILE *fp = open_memstream(&header, &header_len);
 	// TODO (brian) determine how we can tell if we're serving the site over http or https?
-	fprintf(fp, "Set-Cookie: Session=%s; Expires=%s; %sHttpOnly\r\n",
+	fprintf(fp, "Set-Cookie: " SESSION_KEY "=%s; Expires=%s; %sHttpOnly\r\n",
 		session->session_id,
 		expires_str,
 		secure ? "Secure; " : ""
@@ -243,36 +242,52 @@ int user_api_login(struct mg_connection *conn, struct mg_http_message *hm)
 	return 0;
 }
 
-// user_api_logout: endpoint, POST - /api/v1/user/logout
+// user_api_logout: endpoint, POST - /api/v1/logout
 int user_api_logout(struct mg_connection *conn, struct mg_http_message *hm)
 {
 	// TODO (brian) delete the user session record, and wipe the cookie in the response
+
+	struct mg_str *session = mg_http_get_header(hm, SESSION_KEY);
+	do {
+	if (session != NULL) {
+		char *delete_query = "delete from user_sessions where session_id = ?;";
+
+		autofree_stmt sqlite3_stmt *stmt = NULL;
+		int rc = 0;
+
+		rc = sqlite3_prepare_v2(DATABASE, delete_query, -1, &stmt, NULL);
+		if (rc != SQLITE_OK) {
+			ERR("could not remove user session with id '%.s' from the database.",
+				session->ptr,
+				session->len
+			);
+			break;
+		}
+
+		sqlite3_bind_text(stmt, 1, session->ptr, session->len, NULL);
+
+		rc = sqlite3_step(stmt);
+		if (rc != SQLITE_DONE) {
+			ERR("could not remove user session with id '%.s' from the database.",
+				session->ptr,
+				session->len
+			);
+		}
+	}
+	}
+	while (0);
+
+	// NOTE (brian) we always succeed on a logout, even if we can't wipe the record for some reason
+	mg_http_reply(conn, 200, NULL, "");
+
 	return 0;
 }
 
-// whoami_to_json : converts a WhoAmI structure to a json blob
-char *whoami_to_json(WhoAmI *who)
+// user_api_whoami: endpoint, GET - /api/v1/whoami
+int user_api_whoami(struct mg_connection *conn, struct mg_http_message *hm)
 {
-	json_t *object;
-	json_error_t error;
-	char *json;
-
-	object = json_pack(
-		"{s:I,s:s,s:s}",
-		"id", (json_int_t)who->id,
-		"username", who->username,
-		"email", who->email
-		);
-
-	if (object == NULL) {
-		fprintf(stderr, "%s %d\n", error.text, error.position);
-	}
-
-	json = json_dumps(object, JSON_SORT_KEYS | JSON_COMPACT);
-
-	json_decref(object);
-
-	return json;
+	// read from the Session cookie, and return the corresponding user_id for this session id.
+	return 0;
 }
 
 // login_from_json: parses a 'Login' request from some JSON input

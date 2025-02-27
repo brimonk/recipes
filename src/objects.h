@@ -64,4 +64,10 @@ void db_transaction_rollback();
 // performing database operations with them.
 DB_Metadata metadata_clone(DB_Metadata original);
 
+// TODO (brian) It'd be nice if this cleanup function was in common.h, but something in me doesn't
+// want to put sqlite functions in common.h (even though this version has so much junk).
+
+#define autofree_stmt __attribute__((cleanup(cleanup_free_stmt)))
+void cleanup_free_stmt(void *p);
+
 #endif // OBJECTS_H

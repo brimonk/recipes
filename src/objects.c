@@ -393,3 +393,9 @@ DB_Metadata metadata_clone(DB_Metadata original)
     };
     return clone;
 }
+
+#define autofree_stmt __attribute__((cleanup(cleanup_free_stmt)))
+void cleanup_free_stmt(void *p)
+{
+    sqlite3_finalize((sqlite3_stmt *)*(void **)p);
+}

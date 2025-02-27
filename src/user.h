@@ -21,8 +21,6 @@ typedef struct User {
 	char *password; // at this point, it's a hash
 } User;
 
-// UserSession : this data gets concatenated with a ":", and base64 encoded, and stored in a cookie
-// This is what we use to determine if a user is who they say they are, and so on.
 typedef struct UserSession {
 	char *session_id;
 	char *expire_ts;
@@ -33,9 +31,6 @@ typedef struct WhoAmI {
     char *username;
     char *email;
 } WhoAmI;
-
-// user_api_newuser: endpoint, /api/v1/user/create
-int user_api_newuser(struct mg_connection *conn, struct mg_http_message *hm);
 
 // user_api_login: endpoint, /api/v1/user/login
 int user_api_login(struct mg_connection *conn, struct mg_http_message *hm);

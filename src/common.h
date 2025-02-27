@@ -195,6 +195,9 @@ enum {
 #define ERR(fmt, ...) (c_fprintf(__FILE__, __LINE__, __FUNCTION__, LOG_ERR, stderr, fmt "\n", ##__VA_ARGS__)) // error message
 #define DBG(fmt, ...) (c_fprintf(__FILE__, __LINE__, __FUNCTION__, LOG_DBG, stderr, fmt "\n", ##__VA_ARGS__)) // verbose message
 
+#define autofree    __attribute__((cleanup(cleanup_free)))
+#define autofreearr __attribute__((cleanup(cleanup_free_arr)))
+
 #if defined(COMMON_IMPLEMENTATION)
 
 /* c_resize : resizes the ptr should length and capacity be the same */
@@ -637,5 +640,18 @@ void pcg_seed(struct pcgrand_t *rng, u64 initstate, u64 initseq)
 #endif // COMMON_IMPLEMENTATION
 
 #include "stb_ds.h"
+
+
+#ifdef COMMON_IMPLMENTATION
+void cleanup_free(void *p)
+{
+    free(*(void **)p);
+}
+
+void cleanup_free_arr(void *p)
+{
+    arrfree(*(void **)p);
+}
+#endif // COMMON_IMPLEMENTATION
 
 #endif // COMMON_H
