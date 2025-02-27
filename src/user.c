@@ -150,11 +150,8 @@ UserSession *create_user_session(Login *login)
 	return session;
 }
 
-char *create_cookie_header(UserSession *session, bool secure)
+char *create_cookie_header(char *session_id, char *expire_ts, bool secure, bool expire_me)
 {
-	size_t header_len;
-	char *header = NULL;
-
 	// NOTE (brian) in our database, we generate SANE date formats (YYYYmmdd-HHMMSS.FFF). However,
 	// according to RFC-6265 (HTTP State Management Mechanism), we need to use an RFC-1126 date
 	// (Requirements for Internet Hosts -- Application and Support), which is defined in RFC-2616
@@ -169,30 +166,53 @@ char *create_cookie_header(UserSession *session, bool secure)
 
 	// NOTE (brian) this currently throws away the fractional part of the time string that we have.
 
-	struct tm expires = { 0 };
-	char *rv = strptime(session->expire_ts, "%Y%m%d-%H%M%S", &expires);
-	if (rv == NULL) {
-		ERR("could not parse the expire_ts on the user session!");
-		return NULL;
-	}
-
-	time_t expires_time = mktime(&expires);
-	if (gmtime_r(&expires_time, &expires) == NULL) {
-		ERR("could not convert the expires time to UTC!");
-		return NULL;
-	}
+	size_t header_len;
+	char *header = NULL;
 
 	char expires_str[32] = { 0 };
-	strftime(expires_str, sizeof expires_str, "%a %b %d %T %Y", &expires);
 
-	FILE *fp = open_memstream(&header, &header_len);
-	// TODO (brian) determine how we can tell if we're serving the site over http or https?
-	fprintf(fp, "Set-Cookie: " SESSION_KEY "=%s; Expires=%s; %sHttpOnly\r\n",
-		session->session_id,
-		expires_str,
-		secure ? "Secure; " : ""
-	);
-	fclose(fp);
+	if (!expire_me) {
+		struct tm expires = { 0 };
+		char *rv = strptime(expire_ts, "%Y%m%d-%H%M%S", &expires);
+		if (rv == NULL) {
+			ERR("could not parse the expire_ts on the user session!");
+			return NULL;
+		}
+
+		time_t expires_time = mktime(&expires);
+		if (gmtime_r(&expires_time, &expires) == NULL) {
+			ERR("could not convert the expires time to UTC!");
+			return NULL;
+		}
+
+		strftime(expires_str, sizeof expires_str, "%a %b %d %T %Y", &expires);
+
+		FILE *fp = open_memstream(&header, &header_len);
+		// TODO (brian) determine how we can tell if we're serving the site over http or https?
+		fprintf(fp, "Set-Cookie: " SESSION_KEY "=%s; Expires=%s; %sHttpOnly\r\n",
+			session_id,
+			expires_str,
+			secure ? "Secure; " : ""
+		);
+		fclose(fp);
+	} else {
+		struct tm expires = { 0 };
+		time_t expires_time = time(NULL) - 60; // 1 minute ago?
+		if (gmtime_r(&expires_time, &expires) == NULL) {
+			ERR("could not convert the expires time to UTC!");
+			return NULL;
+		}
+
+		strftime(expires_str, sizeof expires_str, "%a %b %d %T %Y", &expires);
+
+		FILE *fp = open_memstream(&header, &header_len);
+		// TODO (brian) determine how we can tell if we're serving the site over http or https?
+		fprintf(fp, "Set-Cookie: " SESSION_KEY "=garbage; Expires=%s; %sHttpOnly\r\n",
+			expires_str,
+			secure ? "Secure; " : ""
+		);
+		fclose(fp);
+	}
 
 	return header;
 }
@@ -231,7 +251,12 @@ int user_api_login(struct mg_connection *conn, struct mg_http_message *hm)
 		return -1;
 	}
 
-	char *header = create_cookie_header(session, false);
+	char *header = create_cookie_header(
+		session->session_id,
+		session->expire_ts,
+		false, // TODO (brian) check for https
+		false
+	);
 
 	mg_http_reply(conn, 200, header, "{\"session_id\":\"%s\",\"expire_ts\":\"%s\"}", session->session_id, session->expire_ts);
 
@@ -277,7 +302,14 @@ int user_api_logout(struct mg_connection *conn, struct mg_http_message *hm)
 	// NOTE (brian) the standards compliant way to REMOVE a cookie is to give it a bogus value,
 	// and expire it in the past.
 
-	mg_http_reply(conn, 200, NULL, "");
+	autofree char *header = create_cookie_header(
+		NULL,
+		NULL,
+		false, // TODO (brian) check for https
+		true
+	);
+
+	mg_http_reply(conn, 200, header, "");
 
 	return 0;
 }

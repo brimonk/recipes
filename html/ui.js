@@ -1,6 +1,7 @@
 // Brian Chrzanowski
 // 2021-09-07 01:17:08
 
+let first_visit = true;
 let staticData = null;
 let user = null;
 
@@ -352,8 +353,9 @@ function MenuComponent(vnode) {
 
     return {
         view: function(vnode) {
-            if (user == null) {
+            if (first_visit) {
                 RefreshUserObject();
+                first_visit = false;
             }
 
             let login_logout_component = null;
@@ -364,7 +366,7 @@ function MenuComponent(vnode) {
             } else {
                 login_logout_component = m("td", { class: "mui--appbar-height", align: "right" },
                     m("a", {
-                        style: "color: white",
+                        style: "color: white; cursor: pointer;",
                         onclick: () => {
                             m.request({
                                 method: "POST",
@@ -1088,6 +1090,7 @@ function LoginComponent(inivialVnode) {
                         url: `/api/v1/login`,
                         body: scrubMe(user),
                     }).then((x) => {
+                        RefreshUserObject();
                         m.route.set(`/`);
                     }).catch((err) => console.error(err));
                 }),
