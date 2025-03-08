@@ -44,9 +44,11 @@ static int is_valid_login(Login *login)
 		return false;
 	}
 
-	sqlite3_bind_text(stmt, 1, login->password, -1, NULL);
-	sqlite3_bind_text(stmt, 2, login->username, -1, NULL);
-	sqlite3_bind_text(stmt, 3, login->username, -1, NULL);
+	rc = sqlite3_bind_text(stmt, 1, login->password, -1, NULL);
+	assert(rc == SQLITE_OK);
+
+	rc = sqlite3_bind_text(stmt, 2, login->username, -1, NULL);
+	assert(rc == SQLITE_OK);
 
 	int is_valid = false;
 

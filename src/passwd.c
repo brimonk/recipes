@@ -25,9 +25,13 @@ SQLITE_EXTENSION_INIT1
 
 #include <sodium.h>
 
+#define DEBUG 0
+
 #if !defined(SQLITE_ASCII) && !defined(SQLITE_EBCDIC)
 # define SQLITE_ASCII 1
 #endif
+
+#include <stdio.h>
 
 static void sqlite3_passwd_verify(sqlite3_context *context, int argc, sqlite3_value **argv)
 {
@@ -37,6 +41,12 @@ static void sqlite3_passwd_verify(sqlite3_context *context, int argc, sqlite3_va
         case SQLITE_TEXT: {
             const unsigned char *passwd = sqlite3_value_text(argv[0]);
             const unsigned char *hash = sqlite3_value_text(argv[1]);
+
+#if DEBUG
+			fprintf(stderr, "passwd len %ld, hash len %ld\n", strlen((char *)passwd), strlen((char *)hash));
+			fprintf(stderr, "passwd %s\n", passwd);
+			fprintf(stderr, "hash   %s\n", hash);
+#endif
 
             int rc = crypto_pwhash_str_verify(
                 (const char *)hash,
@@ -75,6 +85,12 @@ static void sqlite3_passwd(sqlite3_context *context, int argc, sqlite3_value **a
                 sqlite3_result_error_nomem(context);
                 return;
             }
+
+#if DEBUG
+			fprintf(stderr, "passwd len %ld, hash len %ld\n", strlen((char *)passwd), strlen((char *)out));
+			fprintf(stderr, "passwd %s\n", passwd);
+			fprintf(stderr, "hash   %s\n", out);
+#endif
 
             sqlite3_result_text(context, out, -1, NULL);
             break;
