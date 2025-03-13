@@ -81,14 +81,24 @@ json_t *db_search_to_json(UI_SearchQuery *query)
 	// or something.
 	fprintf(stream, "where ");
 	for (char **s = &query->search.where[0]; *s; s++) {
-		fprintf(stream, "%s ", s[0]);
+		fprintf(stream, "%s%s", s[0], s[1] == NULL ? "" : " ");
 	}
 
 	fprintf(stream, ") i on o.%s = i.%s ", query->search.pk_column, query->results.pk_column);
 
     if (query->results.sort_field) {
-        fprintf(stream, " order by %s %s",
-			query->results.sort_field, COALESCE(query->results.sort_order, ""));
+        fprintf(stream, " order by %s ", query->results.sort_field);
+
+        switch (query->results.sort_order) {
+            case DB_QUERY_SORT_ORDER_ASC:
+                fprintf(stream, "asc ");
+                break;
+            case DB_QUERY_SORT_ORDER_DESC:
+                fprintf(stream, "desc ");
+                break;
+            default:
+                break;
+        }
     }
 
     fprintf(stream, " limit %ld offset %ld;",
@@ -107,7 +117,9 @@ json_t *db_search_to_json(UI_SearchQuery *query)
 	// strings for now. It'd also probably be a good idea to check if the number of things in the
 	// bind array matches the number of '?' in the where clause.
 	for (int i = 0; query->search.bind[i]; i++) {
-		rc = sqlite3_bind_text(stmt, i + 1, (const char *)query->search.bind[i], -1, NULL);
+        char local_query[512] = { 0 };
+        snprintf(local_query, sizeof local_query, "%%%s%%", query->search.bind[i]);
+		rc = sqlite3_bind_text(stmt, i + 1, strdup(local_query), -1, free);
 		if (rc != SQLITE_OK) {
 			RETURNNOW(NULL);
 		}

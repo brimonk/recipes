@@ -19,6 +19,13 @@ typedef struct DB_ChildTextRecord {
     char *text;
 } DB_ChildTextRecord;
 
+typedef enum {
+    DB_QUERY_SORT_ORDER_NONE,
+    DB_QUERY_SORT_ORDER_ASC,
+    DB_QUERY_SORT_ORDER_DESC,
+    DB_QUERY_SORT_ORDER_TOTAL
+} DB_QUERY_SORT_ORDER;
+
 // DB_Query: currently used to abstract query responsibilities for "UI_SearchQuery"
 typedef struct DB_Query {
     char *pk_column;
@@ -27,7 +34,7 @@ typedef struct DB_Query {
     char **where;
 	char **bind;
     char *sort_field;
-    char *sort_order;
+    DB_QUERY_SORT_ORDER sort_order;
 } DB_Query;
 
 // UI_SearchQuery: user input for performing search queries

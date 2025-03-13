@@ -62,7 +62,7 @@ static struct Recipe *recipe_from_json(char *s);
 static char *recipe_to_json(struct Recipe *recipe);
 
 // recipe_search : fills out a search structure with results
-json_t *recipe_search(char *query, size_t page_size, size_t page_number);
+json_t *recipe_search(char *query, size_t page_size, size_t page_number, char *sort_field, int sort_order);
 
 // NOTE (Brian): I'm putting this here because I'm not sure where else it's really going to be used.
 // Feel free to move it in the future
@@ -202,13 +202,12 @@ int recipe_api_get(struct mg_connection *conn, struct mg_http_message *hm)
 // recipe_api_getlist : endpoint, GET - /api/v1/recipe/list
 int recipe_api_getlist(struct mg_connection *conn, struct mg_http_message *hm)
 {
-	char *query = NULL;
-	char tbuf[BUFSMALL];
-	size_t siz, num;
+	autofree char *query = NULL;
+    autofree char *sort_field = NULL;
+    int sort_order = DB_QUERY_SORT_ORDER_NONE;
+	char tbuf[BUFSMALL] = { 0 };
+	size_t siz = 20, num = 0;
 	int rc;
-
-	siz = 20;
-	num = 0;
 
 	rc = mg_http_get_var(&hm->query, "siz", tbuf, sizeof tbuf);
 	if (rc >= 0 && isdigit(tbuf[0])) { siz = atol(tbuf); }
@@ -217,9 +216,24 @@ int recipe_api_getlist(struct mg_connection *conn, struct mg_http_message *hm)
 	if (rc >= 0 && isdigit(tbuf[0])) { num = atol(tbuf); }
 
 	rc = mg_http_get_var(&hm->query, "q", tbuf, sizeof tbuf);
-	if (rc >= 0 && isdigit(tbuf[0])) { query = tbuf; }
+	if (rc >= 0 && strlen(tbuf) > 0) { query = strdup(tbuf); }
 
-	json_t *json = recipe_search(query, siz, num);
+    rc = mg_http_get_var(&hm->query, "sfield", tbuf, sizeof tbuf);
+    if (rc >= 0) { sort_field = strdup(tbuf); }
+
+    rc = mg_http_get_var(&hm->query, "sorder", tbuf, sizeof tbuf);
+    if (rc >= 0) {
+        mklower(tbuf);
+        if (streq(tbuf, "asc")) {
+            sort_order = DB_QUERY_SORT_ORDER_ASC;
+        } else if (streq(tbuf, "desc")) {
+            sort_order = DB_QUERY_SORT_ORDER_DESC;
+        } else {
+            WRN("Got invalid sort order from user, using default!: %s", tbuf);
+        }
+    }
+
+	json_t *json = recipe_search(query, siz, num, sort_field, sort_order);
 	if (json == NULL) {
 		ERR("search couldn't be performed!\n");
 	}
@@ -519,18 +533,20 @@ int recipe_delete(char *id)
 }
 
 // recipe_search : fills out a search structure with results
-json_t *recipe_search(char *query, size_t page_size, size_t page_number)
+json_t *recipe_search(char *query, size_t page_size, size_t page_number, char *sort_field, int sort_order)
 {
 	// TODO (Brian) finish updating the 
 	char *search_cols[] = { "id", "search_text", NULL };
 	char *where_clause[] = { "search_text", "like", "?", NULL };
-	char *search_bind_params[] = { COALESCE(query, "%"), NULL };
+	char *search_bind_params[] = { COALESCE(query, ""), NULL };
 	DB_Query search = {
 		.pk_column = "id",
 		.columns = search_cols,
 		.table = "v_recipes",
 		.where = where_clause,
-		.bind = search_bind_params
+		.bind = search_bind_params,
+        .sort_field = sort_field,
+        .sort_order = sort_order
 	};
 
 	char *results_cols[] = { "id", "name", "prep_time", "cook_time", "servings", NULL };
