@@ -116,7 +116,8 @@ json_t *db_search_to_json(UI_SearchQuery *query)
     json = json_object();
 	results = json_array();
 
-    json_object_set_new(json, "total", json_integer(0));
+    i64 total = 0;
+
     json_object_set_new(json, "page", json_integer(query->page_number));
     json_object_set_new(json, "size", json_integer(query->page_size));
 
@@ -173,7 +174,10 @@ json_t *db_search_to_json(UI_SearchQuery *query)
 		}
 
 		json_array_append_new(results, elem);
+        total++;
     }
+
+    json_object_set_new(json, "total", json_integer(total));
 
     json_object_set_new(json, "results", results);
 
