@@ -86,7 +86,7 @@ function P(text) {
 
 // A : anchor wrapper
 function A(href, text) {
-    return m("a", { href: href }, text);
+    return m("a", { href: href, target: "_blank" }, text);
 }
 
 // DIV: returns m("div", arg)
@@ -542,7 +542,7 @@ function RecipeViewComponent(vnode) {
                 ]);
 
                 condpush(content, recipe.link, [
-                    A(recipe.link, "External Link"),
+                    A(recipe.link, "Click Here to View"),
                 ]);
 
                 condpush(content, recipe.ingredients.length > 0, [
@@ -568,6 +568,8 @@ function RecipeViewComponent(vnode) {
                 ]);
 
                 condpush(content, recipe.note, [ Divider() ]);
+
+                content.push(DIV());
 
                 condpush(content, recipe.note, [
                     H3("Notes"),
